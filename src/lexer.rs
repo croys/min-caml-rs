@@ -37,7 +37,7 @@ pub enum Token
     LessMinus,
     Semicolon,
     Eof,
-    Name( String )
+    Name( String ) // FIXME: need a label type
 }
 
 peg::parser!{
@@ -55,22 +55,13 @@ peg::parser!{
         // FIXME: deal with nested comments
             = "(*" { String::from("FIXME - comment") }
 
-        rule lparen() -> Token
-            = "(" { Token::LParen }
-
-        rule rparen() -> Token
-            = ")" { Token::RParen }
-
         pub rule lit_true() -> Token
             = "true" { Token::Bool(true) }
 
         pub rule lit_false() -> Token
             = "false" { Token::Bool(false) }
 
-        rule not() -> Token
-            = "not" { Token::Not }
-
-        rule lit_int() -> Token
+        pub rule lit_int() -> Token
             = n:$(['0'..='9']+)
         {?
             n.parse::<i32>()
@@ -86,7 +77,7 @@ peg::parser!{
         //         }
         //     }
 
-        rule lit_float() -> Token
+        pub rule lit_float() -> Token
             = n:$((['0'..='9']+)
                 ("." ['0'..='9']*)?
                 (['e' | 'E'] ['+' | '-']? ['0'..='9']+)?
@@ -97,61 +88,9 @@ peg::parser!{
                 .map_err(|e| "Couldn't parse float") // FIXME: better error msg
         }
 
-        rule minus() -> Token           = "-"       { Token::Minus }
-
-        rule plus() -> Token            = "+"       { Token::Plus }
-
-        rule minus_dot() -> Token       = "-."      { Token::MinusDot }
-
-        rule plus_dot() -> Token        = "+."      { Token::PlusDot }
-
-        rule ast_dot() -> Token         = "*."      { Token::AstDot }
-
-        rule slash_dot() -> Token       = "/."      { Token::SlashDot }
-
-        rule equal() -> Token           = "="       { Token::Equal }
-
-        rule less_greater() -> Token    = "<>"      { Token::LessGreater }
-
-        rule less_equal() -> Token      = "<="      { Token::LessEqual }
-
-        rule greater_equal() -> Token   = "<="      { Token::GreaterEqual }
-
-        rule less() -> Token            = "<"       { Token::Less }
-
-        rule greater()  -> Token        = ">"       { Token::Greater }
-
-        rule if_() -> Token             = "if"      { Token::If }
-
-        rule then() -> Token            = "then"    { Token::Then }
-
-        rule else_() -> Token           = "else"    { Token::Else }
-
-        rule let_() -> Token            = "let"     { Token::Let }
-
-        rule in_() -> Token              = "in"      { Token::In }
-
-        rule rec() -> Token             = "rec"     { Token::Rec }
-
-        rule comma() -> Token           = ","       { Token::Comma }
 
         // FIXME: fresh ID
         rule underscore() -> Token      = "_"       { Token::Ident }
-
-        rule array_create0() -> Token
-            = "Array.create"                        { Token::ArrayCreate }
-
-        rule array_make() -> Token
-          = "Array.make"                            { Token::ArrayCreate }
-
-        rule array_create() -> Token
-            = array_create0() / array_make()
-
-        rule dot() -> Token             = "."       { Token::Dot }
-
-        rule less_minus() -> Token      = "<-"      { Token::LessMinus }
-
-        rule semicolon() -> Token       = ";"       { Token::Semicolon }
 
         rule eof() -> Token             = ![_]      { Token::Eof }
 
@@ -161,45 +100,41 @@ peg::parser!{
                 )
             { Token::Name( String::from(s) ) }
 
-        // FIXME: comments
-
-        pub rule lex1() -> Token
+            // FIXME: comments
+            pub rule lex1() -> Token
             // = space
             // / comment_start
-            //= lparen()
-            // FIXME: rules in place work...
-            // = [' '] { Token::Minus }
-            = lparen()
-            / rparen()
-            / lit_true()
-            / lit_false()
-            / not()
+            = "("                               { Token::LParen }
+            / ")"                               { Token::RParen }
+            / "true"                            { Token::Bool(true) }
+            / "false"                           { Token::Bool(false) }
+            / "not"                             { Token::Not }
             / lit_int()
             / lit_float()
-            / minus()
-            / plus()
-            / minus_dot()
-            / plus_dot()
-            / ast_dot()
-            / slash_dot()
-            / equal()
-            / less_greater()
-            / less_equal()
-            / greater_equal()
-            / less()
-            / greater()
-            / if_()
-            / then()
-            / else_()
-            / let_()
-            / in_()
-            / rec()
-            / comma()
+            / "-"                               { Token::Minus }
+            / "+"                               { Token::Plus }
+            / "-."                              { Token::MinusDot }
+            / "+."                              { Token::PlusDot }
+            / "*."                              { Token::AstDot }
+            / "/."                              { Token::SlashDot }
+            / "="                               { Token::Equal }
+            / "<>"                              { Token::LessGreater }
+            / "<="                              { Token::LessEqual }
+            / ">="                              { Token::GreaterEqual }
+            / "<"                               { Token::Less }
+            / ">"                               { Token::Greater }
+            / "if"                              { Token::If }
+            / "then"                            { Token::Then }
+            / "else"                            { Token::Else }
+            / "let"                             { Token::Let }
+            / "in"                              { Token::In }
+            / "rec"                             { Token::Rec }
+            / ","                               { Token::Comma }
             / underscore()
-            / array_create()
-            / dot()
-            / less_minus()
-            / semicolon()
+            / ( "Array.create" / "Array.make" ) { Token::ArrayCreate }
+            / "."                               { Token::Dot }
+            / "<-"                              { Token::LessMinus }
+            / ";"                               { Token::Semicolon }
             // / eof()
             / name()
 
@@ -211,13 +146,3 @@ peg::parser!{
 
     }
 }
-
-/*
-#[test]
-fn test_basics() {
-    assert_eq!(parser::lit_true("true"),    Ok(Token::Bool(true)));
-    assert_eq!(parser::lit_false("false"),  Ok(Token::Bool(false)));
-    assert!(parser::lit_true("1234").is_err());
-    assert!(parser::lit_false("true").is_err());
-}
-*/
