@@ -3,7 +3,7 @@ use peg;
 // Fairly direct translation of tokenizer from lexer.mll
 //
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug,PartialEq,Clone)]
 pub enum Token
 {
     LParen,
@@ -51,9 +51,8 @@ peg::parser!{
         // rule space() -> &'input str
         //     = s:$([' ' | '\t' | '\n' | '\r']) { s }
 
-        rule comment_start() -> String
-        // FIXME: deal with nested comments
-            = "(*" { String::from("FIXME - comment") }
+        pub rule comment() -> &'input str
+            = "(*" s:$((!"*)" [_])*)  "*)" { s }
 
         pub rule lit_true() -> Token
             = "true" { Token::Bool(true) }
@@ -100,10 +99,7 @@ peg::parser!{
                 )
             { Token::Name( String::from(s) ) }
 
-            // FIXME: comments
             pub rule lex1() -> Token
-            // = space
-            // / comment_start
             = "("                               { Token::LParen }
             / ")"                               { Token::RParen }
             / "true"                            { Token::Bool(true) }
@@ -135,11 +131,10 @@ peg::parser!{
             / "."                               { Token::Dot }
             / "<-"                              { Token::LessMinus }
             / ";"                               { Token::Semicolon }
-            // / eof()
             / name()
 
         pub rule lex2() -> Token
-            = space()* l:(lex1()) space()* { l }
+            = (comment() / space())* l:(lex1()) (comment() / space()) * { l }
         
         pub rule main() -> Vec<Token>
             = l:(lex2())+ { l }

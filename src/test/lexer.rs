@@ -73,18 +73,30 @@ fn test_fib() {
     let n           = || -> String { String::from("n") };
     let print_int   = || -> String { String::from("print_int") };
 
-    assert_eq!(
-        lexer::parser::main(&contents),
-        Ok(vec![
-            Let, Rec, Name(fib()), Name(n()), Equal,
-                If, Name(n()), LessEqual, Int(1),
-                Then, Name(n()),
-                Else,
-                    Name(fib()), LParen, Name(n()), Minus, Int(1), RParen,
-                    Plus,
-                    Name(fib()), LParen, Name(n()), Minus, Int(2), RParen,
-            In,
-                Name(print_int()), LParen, Name(fib()), Int(30), RParen
-        ])
-    );
+    let expected = Ok(vec![
+        Let, Rec, Name(fib()), Name(n()), Equal,
+            If, Name(n()), LessEqual, Int(1),
+            Then, Name(n()),
+            Else,
+                Name(fib()), LParen, Name(n()), Minus, Int(1), RParen,
+                Plus,
+                Name(fib()), LParen, Name(n()), Minus, Int(2), RParen,
+        In,
+            Name(print_int()), LParen, Name(fib()), Int(30), RParen
+    ]);
+
+    assert_eq!(lexer::parser::main(&contents), expected);
+
+    let contents2 = fs::read_to_string("src/test/fib2.ml")
+        .expect("unable to read 'fib2.ml'");
+
+    assert_eq!(lexer::parser::main(&contents2), expected);
+}
+
+#[test]
+fn test_comments() {
+    assert_eq!(parser::comment("(**)"), Ok(""));
+    assert_eq!(parser::comment("(* test *)"), Ok(" test "));
+    assert!(parser::comment("(*").is_err());
+    assert!(parser::comment("*)").is_err());
 }
