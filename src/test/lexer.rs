@@ -65,24 +65,21 @@ fn test_fib() {
     let tokens = lexer::parser::main(&contents);
     println!("{:?}", tokens.unwrap());
 
-    // FIXME: Use str/id instead of String or box
-    // Probably want str for lexer, then boxed String/ids in AST
     use lexer::Token::*;
 
-    let fib         = || -> String { String::from("fib") };
-    let n           = || -> String { String::from("n") };
-    let print_int   = || -> String { String::from("print_int") };
+    let fib         = ||  { Ident("fib") };
+    let n           = ||  { Ident("n") };
+    let print_int   = ||  { Ident("print_int") };
 
     let expected = Ok(vec![
-        Let, Rec, Name(fib()), Name(n()), Equal,
-            If, Name(n()), LessEqual, Int(1),
-            Then, Name(n()),
+        Let, Rec, fib(), n(), Equal,
+            If, n(), LessEqual, Int(1), Then, n(),
             Else,
-                Name(fib()), LParen, Name(n()), Minus, Int(1), RParen,
-                Plus,
-                Name(fib()), LParen, Name(n()), Minus, Int(2), RParen,
+                fib(), LParen, n(), Minus, Int(1), RParen,
+                    Plus,
+                    fib(), LParen, n(), Minus, Int(2), RParen,
         In,
-            Name(print_int()), LParen, Name(fib()), Int(30), RParen
+            print_int(), LParen, fib(), Int(30), RParen
     ]);
 
     assert_eq!(lexer::parser::main(&contents), expected);

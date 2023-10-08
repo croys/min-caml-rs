@@ -3,8 +3,8 @@ use peg;
 // Fairly direct translation of tokenizer from lexer.mll
 //
 
-#[derive(Debug,PartialEq,Clone)]
-pub enum Token
+#[derive(Debug,PartialEq,Clone,Copy)]
+pub enum Token<'a>
 {
     LParen,
     RParen,
@@ -31,75 +31,62 @@ pub enum Token
     In,
     Rec,
     Comma,
-    Ident, // FIXME
+    Ident( &'a str ),
     ArrayCreate,
     Dot,
     LessMinus,
     Semicolon,
     Eof,
-    Name( String ) // FIXME: need a label type
 }
 
 peg::parser!{
 
     pub grammar parser() for str {
 
-        // FIXME: probably want slices for all of these..
-        rule space() -> String
-            = s:$([' ' | '\t' | '\n' | '\r']+) { String::from(s) }
-
-        // rule space() -> &'input str
-        //     = s:$([' ' | '\t' | '\n' | '\r']) { s }
+        rule space() -> &'input str
+            = s:$([' ' | '\t' | '\n' | '\r']+) { s }
 
         pub rule comment() -> &'input str
             = "(*" s:$((!"*)" [_])*)  "*)" { s }
 
-        pub rule lit_true() -> Token
+        pub rule lit_true() -> Token<'input>
             = "true" { Token::Bool(true) }
 
-        pub rule lit_false() -> Token
+        pub rule lit_false() -> Token<'input>
             = "false" { Token::Bool(false) }
 
-        pub rule lit_int() -> Token
-            = n:$(['0'..='9']+)
-        {?
-            n.parse::<i32>()
-                .map(|x| Token::Int(x))
-                .map_err(|e| "Couldn't parse int") // FIXME: better error msg
-        }
+        pub rule lit_int() -> Token<'input>
+            = n:$(['0'..='9']+) {?
+                match n.parse::<i32>() {
+                    Ok(x) => Ok(Token::Int(x)),
+                    Err(..) => Err("Couldn't parse int")
+                }
+            }
 
-        // rule lit_int() -> Token
-        //     = n:$(['0'..='9']+) {?
-        //         match n.parse::<i32>() {
-        //             Ok(x) => Ok(Token::Int(x)),
-        //             Err(..) => Err("Couldn't parse int")
-        //         }
-        //     }
-
-        pub rule lit_float() -> Token
+        pub rule lit_float() -> Token<'input>
             = n:$((['0'..='9']+)
                 ("." ['0'..='9']*)?
                 (['e' | 'E'] ['+' | '-']? ['0'..='9']+)?
             )
         {?
-            n.parse::<f64>()
-                .map(|x| Token::Float(x))
-                .map_err(|e| "Couldn't parse float") // FIXME: better error msg
+            match n.parse::<f64>() {
+                Ok(x)   => Ok(Token::Float(x)),
+                Err(..) => Err("Couldn't parse float")  // FIXME: better error msg
+            }
         }
 
-
         // FIXME: fresh ID
-        rule underscore() -> Token      = "_"       { Token::Ident }
+        rule underscore() -> Token<'input>  = "_"       { Token::Ident("_") }
 
-        rule eof() -> Token             = ![_]      { Token::Eof }
+        rule eof() -> Token<'input>         = ![_]      { Token::Eof }
 
-        rule name() -> Token
+        rule name() -> Token<'input>
             = s:$(  ['a'..='z']
                     ( ['0'..='9' | 'a'..='z'  | 'A'..='Z' | '_']  )*
                 )
-            { Token::Name( String::from(s) ) }
+            { Token::Ident( s ) }
 
-            pub rule lex1() -> Token
+        pub rule lex1() -> Token<'input>
             = "("                               { Token::LParen }
             / ")"                               { Token::RParen }
             / "true"                            { Token::Bool(true) }
@@ -133,11 +120,15 @@ peg::parser!{
             / ";"                               { Token::Semicolon }
             / name()
 
-        pub rule lex2() -> Token
+        pub rule lex2() -> Token<'input>
             = (comment() / space())* l:(lex1()) (comment() / space()) * { l }
         
-        pub rule main() -> Vec<Token>
+        pub rule main() -> Vec<Token<'input>>
             = l:(lex2())+ { l }
+
+        // FIXME: have two lexers, one which preserves comments, one which doesn't?
+        // parser would need to accept comments/spaces as well
+        // could normalise AST by removing all spaces/comments
 
     }
 }
