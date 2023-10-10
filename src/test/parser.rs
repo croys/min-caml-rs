@@ -106,18 +106,20 @@ fn test_fib() {
 fn test_ml() {
 
     for entry in fs::read_dir("src/test/ml").unwrap() {
-        let dir = entry.unwrap();
+        let path = entry.unwrap().path();
 
-        println!("{:?}", dir.path() );
-        let contents = fs::read_to_string( dir.path() )
-            .expect( format!("unable to read {}", dir.path().display() ).as_str() );
-        let res = lexer::parser::main(&contents);
-        let tokens = res.unwrap();
+        if !path.is_dir() {
+            println!("{:?}", path );
+            let contents = fs::read_to_string( path.clone() )
+                .expect( format!("unable to read {}", path.display() )
+                    .as_str() );
+            let res = lexer::parser::main(&contents);
+            let tokens = res.unwrap();
+            println!("{:?}", tokens);
 
-        println!("{:?}", tokens);
-
-        let syn = parser::parser::exp( &tokens, () );
-        println!("{:?}", syn.unwrap());
+            let syn = parser::parser::exp( &tokens, () );
+            println!("{:?}", syn.unwrap());
+        }
     }
 
 }

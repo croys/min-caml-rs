@@ -43,7 +43,7 @@ peg::parser!{
 
     pub grammar parser() for str {
 
-        rule brk() = !['a'..='z' | 'A'..='Z' | '_' ] { () }
+        rule brk() = !['a'..='z' | 'A'..='Z' | '0'..='9' | '_' ] { () }
 
         rule space() -> &'input str
             = s:$([' ' | '\t' | '\n' | '\r']+) { s }
@@ -91,11 +91,12 @@ peg::parser!{
         pub rule lex1() -> Token<'input>
             = "("                               { Token::LParen }
             / ")"                               { Token::RParen }
-            / "true"                            { Token::Bool(true) }
-            / "false"                           { Token::Bool(false) }
-            / "not"                             { Token::Not }
+            / "true" brk()                      { Token::Bool(true) }
+            / "false" brk()                     { Token::Bool(false) }
+            / "not" brk()                       { Token::Not }
             / lit_int()
             / lit_float()
+            / "<-"                              { Token::LessMinus }
             / "-."                              { Token::MinusDot }
             / "+."                              { Token::PlusDot }
             / "*."                              { Token::AstDot }
@@ -108,17 +109,17 @@ peg::parser!{
             / ">="                              { Token::GreaterEqual }
             / "<"                               { Token::Less }
             / ">"                               { Token::Greater }
-            / "if"                              { Token::If }
-            / "then"                            { Token::Then }
-            / "else"                            { Token::Else }
-            / "let"                             { Token::Let }
+            / "if" brk()                        { Token::If }
+            / "then" brk()                      { Token::Then }
+            / "else" brk()                      { Token::Else }
+            / "let" brk()                       { Token::Let }
             / "in" brk()                        { Token::In }
-            / "rec"                             { Token::Rec }
+            / "rec" brk()                       { Token::Rec }
             / ","                               { Token::Comma }
             / underscore()
-            / ( "Array.create" / "Array.make" ) { Token::ArrayCreate }
+            / ( "Array.create" / "Array.make" ) brk()
+                                                { Token::ArrayCreate }
             / "."                               { Token::Dot }
-            / "<-"                              { Token::LessMinus }
             / ";"                               { Token::Semicolon }
             / name()
 
