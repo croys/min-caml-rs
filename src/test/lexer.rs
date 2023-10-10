@@ -33,9 +33,11 @@ fn test_int_literals() {
 
 #[test]
 fn test_float_literals() {
-    assert_eq!(parser::lit_float("0"), Ok(Token::Float(0.0)));
-    assert_eq!(parser::lit_float("1"), Ok(Token::Float(1.0)));
-    assert_eq!(parser::lit_float("1024"), Ok(Token::Float(1024.0)));
+    assert!(parser::lit_float("0").is_err());
+    assert!(parser::lit_float("1").is_err());
+    assert_eq!(parser::lit_float("0."), Ok(Token::Float(0.0)));
+    assert_eq!(parser::lit_float("1."), Ok(Token::Float(1.0)));
+    assert_eq!(parser::lit_float("1024.0"), Ok(Token::Float(1024.0)));
     assert_eq!(parser::lit_float("0.0"), Ok(Token::Float(0.0)));
     assert_eq!(parser::lit_float("1.0"), Ok(Token::Float(1.0)));
     assert_eq!(parser::lit_float("8000000000.0"), Ok(Token::Float(8000000000.0)));

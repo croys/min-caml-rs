@@ -100,3 +100,24 @@ fn test_fib() {
     println!("{:?}", syn.unwrap());
 
 }
+
+// FIXME: parameterised tests
+#[test]
+fn test_ml() {
+
+    for entry in fs::read_dir("src/test/ml").unwrap() {
+        let dir = entry.unwrap();
+
+        println!("{:?}", dir.path() );
+        let contents = fs::read_to_string( dir.path() )
+            .expect( format!("unable to read {}", dir.path().display() ).as_str() );
+        let res = lexer::parser::main(&contents);
+        let tokens = res.unwrap();
+
+        println!("{:?}", tokens);
+
+        let syn = parser::parser::exp( &tokens, () );
+        println!("{:?}", syn.unwrap());
+    }
+
+}

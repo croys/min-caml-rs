@@ -75,6 +75,8 @@ peg::parser!{
                         } ).collect(),
                     e0, e1 ) )
             }
+            // FIXME: This corresponse to the `elems` rule in parser.mly
+            // which doesn't require the parentheses...
             [LParen] e0:exp( st ) [Comma]
                 es:(exp( st ) ++ [Comma]) [RParen]
                 {
@@ -83,6 +85,13 @@ peg::parser!{
                     vec.extend(es);
                     Box::new( Syntax::Tuple(vec) )
                 }
+            x:(@) [Semicolon] y:@
+            {
+                Box::new( Syntax::Let(
+                    ( /* FIXME: fresh tmp id */ String::from(""), Type::Unit ),
+                        x, y )
+                )
+            }
             [ArrayCreate] e0:simple_exp( st ) e1:simple_exp( st )
             {
                 Box::new( Syntax::Array( e0, e1 ) )

@@ -43,6 +43,8 @@ peg::parser!{
 
     pub grammar parser() for str {
 
+        rule brk() = !['a'..='z' | 'A'..='Z' | '_' ] { () }
+
         rule space() -> &'input str
             = s:$([' ' | '\t' | '\n' | '\r']+) { s }
 
@@ -56,7 +58,7 @@ peg::parser!{
             = "false" { Token::Bool(false) }
 
         pub rule lit_int() -> Token<'input>
-            = n:$(['0'..='9']+) {?
+            = n:$(['0'..='9']+) !"." {?
                 match n.parse::<i32>() {
                     Ok(x) => Ok(Token::Int(x)),
                     Err(..) => Err("Couldn't parse int")
@@ -64,8 +66,8 @@ peg::parser!{
             }
 
         pub rule lit_float() -> Token<'input>
-            = n:$((['0'..='9']+)
-                ("." ['0'..='9']*)?
+            = n:$((['0'..='9']+) "."
+                (['0'..='9']*)?
                 (['e' | 'E'] ['+' | '-']? ['0'..='9']+)?
             )
         {?
@@ -94,12 +96,12 @@ peg::parser!{
             / "not"                             { Token::Not }
             / lit_int()
             / lit_float()
-            / "-"                               { Token::Minus }
-            / "+"                               { Token::Plus }
             / "-."                              { Token::MinusDot }
             / "+."                              { Token::PlusDot }
             / "*."                              { Token::AstDot }
             / "/."                              { Token::SlashDot }
+            / "-"                               { Token::Minus }
+            / "+"                               { Token::Plus }
             / "="                               { Token::Equal }
             / "<>"                              { Token::LessGreater }
             / "<="                              { Token::LessEqual }
@@ -110,7 +112,7 @@ peg::parser!{
             / "then"                            { Token::Then }
             / "else"                            { Token::Else }
             / "let"                             { Token::Let }
-            / "in"                              { Token::In }
+            / "in" brk()                        { Token::In }
             / "rec"                             { Token::Rec }
             / ","                               { Token::Comma }
             / underscore()
