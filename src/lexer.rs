@@ -75,7 +75,7 @@ peg::parser!{
             }
         }
 
-        // FIXME: fresh ID
+        // FIXME: fresh ID?
         rule underscore() -> Token<'input>  = "_"       { Token::Ident("_") }
 
         rule eof() -> Token<'input>         = ![_]      { Token::Eof }

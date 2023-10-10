@@ -9,6 +9,10 @@
 //                                                        
 //
 mod lexer;
+mod id;
+mod ty;
+mod syntax;
+mod parser;
 
 #[cfg(test)]
 mod test;
