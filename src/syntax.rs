@@ -1,3 +1,12 @@
+use crate::ty::Type;
+
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Fundef {
+    pub name    : ( String /* Id */, Type ) ,
+    pub args    : Vec<( String /* Id */, Type )>,
+    pub body    : Box< Syntax >
+}
 
 #[derive(Debug,PartialEq,Clone)]
 pub enum Syntax
@@ -21,14 +30,12 @@ pub enum Syntax
     Le( Box<Syntax>, Box<Syntax> ),
     Ge( Box<Syntax>, Box<Syntax> ), // note: addition
     If( Box<Syntax>, Box<Syntax>, Box<Syntax> ),
-    Let(    Box<( () /* FIXME: ID */, () /* FIXME: Type */ )>,
-            Box<Syntax>, Box<Syntax> ),
-    Var( Box<() /* FIXME: ID */> ),
-    LetRec( Box< () /* FIXME: fundef */>, Box<Syntax> ),
+    Let( ( String /* Id */, Type ), Box<Syntax>, Box<Syntax> ),
+    Var( String /* Id */ ),
+    LetRec( Fundef, Box<Syntax> ),
     App( Box<Syntax>, Vec< Box<Syntax> > ),
     Tuple( Vec< Box<Syntax > > ),
-    LetTuple( Vec<( () /* FIXME: ID */, () /* FIXME: type */)>,
-        Box<Syntax>, Box<Syntax> ),
+    LetTuple( Vec<(String /* Id */, Type)>, Box<Syntax>, Box<Syntax> ),
     Array( Box<Syntax>, Box<Syntax> ),
     Get( Box<Syntax>, Box<Syntax> ),
     Put( Box<Syntax>, Box<Syntax>, Box<Syntax> ),

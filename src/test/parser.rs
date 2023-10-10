@@ -56,6 +56,13 @@ fn test_exp() {
         println!("{:?}", syn);
     }
 
+    {
+        let toks = lexer::parser::main("let (a, b) = (1, 2) in (b, a)").unwrap();
+        println!("{:?}", toks);
+        let syn = parser::parser::exp( &toks, () ).unwrap();
+        println!("{:?}", syn);
+    }
+
 }
 
 #[test]

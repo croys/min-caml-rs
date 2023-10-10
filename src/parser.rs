@@ -3,7 +3,8 @@ use peg;
 use crate::lexer;
 use crate::lexer::{Token};
 use crate::syntax;
-use crate::syntax::{Syntax};
+use crate::syntax::{Syntax,Fundef};
+use crate::ty::Type;
 
 use Token::*;
 
@@ -24,7 +25,7 @@ peg::parser!{
             [Float(x)]                  { Box::new( Syntax::Float(x) ) }
             // FIXME: create id
             [Ident(n)]
-                { Box::new( Syntax::Var( Box::new( () ) ) ) }
+                { Box::new( Syntax::Var( String::from( n ) ) ) }
             [LParen] e:exp( st ) [RParen]   { e }
             e0:(@) [Dot] [LParen] e1:exp( st ) [RParen]
                 { Box::new( Syntax::Get( e0, e1 ) ) }
@@ -33,31 +34,46 @@ peg::parser!{
         pub rule exp( st : () ) -> Box<Syntax> = precedence!{
             [If] x:(exp( st )) [Then] y:(exp( st )) [Else] z:(exp( st ))
                 { Box::new( Syntax::If( x, y, z ) ) }
-            [Let] [Rec] n:[Ident(_)] formal_args:[Ident(_)]+ [Equal] e0:exp( st )
+            [Let] [Rec] [Ident(n)] formal_args:[Ident(_)]+ [Equal] e0:exp( st )
                 [In] e1:exp( st )
                 {
-                    // FIXME: implement
-                    Box::new( Syntax::LetRec( Box::new( () ),
+                    Box::new( Syntax::LetRec( Fundef {
+                            // FIXME: fresh tyvar
+                            name : ( String::from( n ), Type::Var( None ) ),
+                            args : formal_args.into_iter().map(|tok| {
+                                    if let Ident(x) = tok {
+                                        // FIXME: ID, fresh tyvar
+                                        ( String::from( x ), Type::Var( None ) )
+                                    } else {
+                                        unreachable!()
+                                    }
+                                } ).collect(),
+                            body : e0 },
                         e1 ) )
                 }
-            [Let] [Ident(_)] [Equal] e0:(exp( st ))
+            [Let] [Ident(n)] [Equal] e0:(exp( st ))
                 // note: below is how to add state
                 // can use with immutable data structs for e.g. environment
                 [In] e1:(exp( { let st2 = (); st2 } ))
                 { Box::new(
-                    // FIXME: Implement
-                    Syntax::Let( Box::new( (
-                            (), // FIXME: ID
-                            () // FIXME: TYpe
-                        ) ),
-                        e0, e1 ) )
+                    Syntax::Let( (  String::from( n ),
+                                    Type::Var( None ) // FIXME: fresh type var
+                                ), e0, e1 ) )
                 }
             [Let] [LParen] ids:([Ident(_)] **<2,> [Comma]) [RParen]
                 [Equal] e0:exp(st) [In] e1:exp(st)
             {
                 // FIXME: patterns are not recursive?
-                // FIXME: types for each id in ids?
-                Box::new( Syntax::LetTuple(vec![], e0, e1 ) ) // FIXME:
+                Box::new( Syntax::LetTuple(
+                    ids.into_iter().map(|tok| {
+                            if let Ident(x) = tok {
+                                // FIXME: Id, fresh tyvar
+                                ( String::from(x), Type::Var(None) )
+                            } else {
+                                unreachable!()
+                            }
+                        } ).collect(),
+                    e0, e1 ) )
             }
             [LParen] e0:exp( st ) [Comma]
                 es:(exp( st ) ++ [Comma]) [RParen]

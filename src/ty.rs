@@ -9,5 +9,5 @@ pub enum Type
     Fun( Vec<Type>, Box<Type> ),
     Tuple( Vec<Type> ),
     Array( Box<Type> ),
-    Var( Box< Option<Type> > ), // FIXME: ref?
+    Var( Option< Box< Type > > ), // FIXME: ref?
 }
