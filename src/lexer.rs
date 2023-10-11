@@ -1,4 +1,4 @@
-use peg;
+//use peg;
 
 // Fairly direct translation of tokenizer from lexer.mll
 //
@@ -42,7 +42,7 @@ peg::parser! {
 
     pub grammar parser() for str {
 
-        rule brk() = !['a'..='z' | 'A'..='Z' | '0'..='9' | '_' ] { () }
+        rule brk() = !['a'..='z' | 'A'..='Z' | '0'..='9' | '_' ]
 
         rule space() -> &'input str
             = s:$([' ' | '\t' | '\n' | '\r']+) { s }

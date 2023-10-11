@@ -1,4 +1,5 @@
 #[derive(Debug, PartialEq, Clone)]
+#[allow(dead_code)] // FIXME:
 pub enum Type {
     Unit,
     Bool,

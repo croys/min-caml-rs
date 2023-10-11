@@ -108,7 +108,8 @@ fn test_ml() {
         if !path.is_dir() {
             println!("{:?}", path);
             let contents = fs::read_to_string(path.clone())
-                .expect(format!("unable to read {}", path.display()).as_str());
+                .unwrap_or_else(|_|
+                    panic!("unable to read {}", path.display()));
             let res = lexer::parser::main(&contents);
             let tokens = res.unwrap();
             println!("{:?}", tokens);

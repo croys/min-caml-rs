@@ -1,8 +1,6 @@
-use peg;
+//use peg;
 
-use crate::lexer;
 use crate::lexer::Token;
-use crate::syntax;
 use crate::syntax::{Fundef, Syntax};
 use crate::ty::Type;
 
@@ -53,7 +51,8 @@ peg::parser! {
             [Let] [Ident(n)] [Equal] e0:(exp( st ))
                 // note: below is how to add state
                 // can use with immutable data structs for e.g. environment
-                [In] e1:(exp( { let st2 = (); st2 } ))
+                //[In] e1:(exp( { let st2 = (); st2 } ))
+                [In] e1:exp(st)
                 { Box::new(
                     Syntax::Let( (  String::from( n ),
                                     Type::Var( None ) // FIXME: fresh type var
@@ -98,6 +97,9 @@ peg::parser! {
             e0:simple_exp( st ) [Dot] [LParen] e1:exp( st ) [RParen]
                 [LessMinus] e2:exp( st )
             { Box::new( Syntax::Put( e0, e1, e2 ) ) }
+            // e0:(@) [Dot] [LParen] e1:exp( st ) [RParen]
+            //     [LessMinus] e2:exp( st )
+            // { Box::new( Syntax::Put( e0, e1, e2 ) ) }
             --
             x:(@) [Equal] y:@
                 { Box::new( Syntax::Eq( x, y ) ) }

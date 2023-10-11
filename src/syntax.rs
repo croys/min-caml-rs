@@ -8,6 +8,7 @@ pub struct Fundef {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+#[allow(clippy::vec_box)]
 pub enum Syntax {
     Unit,
     Bool(bool),
