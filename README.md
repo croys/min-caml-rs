@@ -1,7 +1,10 @@
 # min-caml-rs
 
+<!---
 [![Crates.io](https://img.shields.io/crates/v/min-caml-rs.svg)](https://crates.io/crates/min-caml-rs)
 [![Docs.rs](https://docs.rs/min-caml-rs/badge.svg)](https://docs.rs/min-caml-rs)
+[![codecov](https://codecov.io/gh/croys/min-caml-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/croys/min-caml-rs)
+--->
 [![CI](https://github.com/croys/min-caml-rs/workflows/CI/badge.svg)](https://github.com/croys/min-caml-rs/actions)
 
 ## Installation
