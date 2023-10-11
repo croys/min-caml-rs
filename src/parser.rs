@@ -65,8 +65,9 @@ peg::parser! {
             }
             // FIXME: This corresponse to the `elems` rule in parser.mly
             // which doesn't require the parentheses...
-            [LParen] e0:exp( st ) [Comma]
-                es:(exp(st) ++ [Comma]) [RParen]
+            // [LParen] e0:exp( st ) [Comma]
+            //     es:(exp(st) ++ [Comma]) [RParen]
+            e0:(@) [Comma] es:(exp(st) ++ [Comma])
                 {
                     let mut vec = Vec::new();
                     vec.push(e0);
@@ -78,19 +79,22 @@ peg::parser! {
                 // FIXME: fresh tmp id
                 Box::new(Syntax::Let((String::from(""), Type::Unit), x, y))
             }
-            e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
-                { Box::new(Syntax::Put(e0, e1, e2)) }
-            e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
-                { Box::new(Syntax::Get(e0, e1)) }
             --
-            //[ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
-            [ArrayCreate] e0:simple_exp(st) e1:exp(st)
-            // FIXME: below doesn't work...
+            [ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
             //[ArrayCreate] e0:exp(st) e1:exp(st)
+            // FIXME: above doesn't work as there is ambiguity
+            // with function application.
+            // Why not just have ArrayCreate as an expression, then
+            // rely on function application?
             {
                 Box::new(Syntax::Array(e0, e1))
             }
             e0:(@) es:(exp(st))+        { Box::new(Syntax::App(e0, es)) }
+            --
+            e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
+                { Box::new(Syntax::Put(e0, e1, e2)) }
+            e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
+                { Box::new(Syntax::Get(e0, e1)) }
             --
             x:(@) [Equal] y:@           { Box::new(Syntax::Eq(x, y)) }
             x:(@) [LessGreater] y:@
