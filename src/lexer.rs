@@ -3,15 +3,14 @@ use peg;
 // Fairly direct translation of tokenizer from lexer.mll
 //
 
-#[derive(Debug,PartialEq,Clone,Copy)]
-pub enum Token<'a>
-{
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Token<'a> {
     LParen,
     RParen,
-    Bool( bool ),
+    Bool(bool),
     Not,
-    Int( i32 ),
-    Float( f64 ),
+    Int(i32),
+    Float(f64),
     Minus,
     Plus,
     MinusDot,
@@ -31,7 +30,7 @@ pub enum Token<'a>
     In,
     Rec,
     Comma,
-    Ident( &'a str ),
+    Ident(&'a str),
     ArrayCreate,
     Dot,
     LessMinus,
@@ -39,7 +38,7 @@ pub enum Token<'a>
     Eof,
 }
 
-peg::parser!{
+peg::parser! {
 
     pub grammar parser() for str {
 
@@ -125,7 +124,7 @@ peg::parser!{
 
         pub rule lex2() -> Token<'input>
             = (comment() / space())* l:(lex1()) (comment() / space()) * { l }
-        
+
         pub rule main() -> Vec<Token<'input>>
             = l:(lex2())+ { l }
 

@@ -1,2 +1,2 @@
-mod lexer;
-mod parser;
+#[rustfmt::skip] mod lexer;
+#[rustfmt::skip] mod parser;

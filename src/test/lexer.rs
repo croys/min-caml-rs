@@ -88,88 +88,78 @@ fn test_keywords() {
 fn test_symbols() {
     // FIXME: parameterised tests
 
-    assert_eq!(parser::lex1("("),           Ok(Token::LParen));
-    assert_eq!(parser::main("(("), Ok(
-        vec![Token::LParen, Token::LParen] ) );
+    assert_eq!(parser::lex1("("),  Ok(Token::LParen));
+    assert_eq!(parser::main("(("), Ok(vec![Token::LParen, Token::LParen]));
 
-    assert_eq!(parser::lex1(")"),           Ok(Token::RParen));
-    assert_eq!(parser::main("))"), Ok(
-        vec![Token::RParen, Token::RParen] ) );
+    assert_eq!(parser::lex1(")"),  Ok(Token::RParen));
+    assert_eq!(parser::main("))"), Ok(vec![Token::RParen, Token::RParen]));
 
-    assert_eq!(parser::lex1("<-"),          Ok(Token::LessMinus));
-    assert_eq!(parser::main("<-<-"), Ok(
-        vec![Token::LessMinus, Token::LessMinus] ) );
+    assert_eq!(parser::lex1("<-"), Ok(Token::LessMinus));
+    assert_eq!(parser::main("<-<-"),
+        Ok(vec![Token::LessMinus, Token::LessMinus]));
 
-    assert_eq!(parser::lex1("-."),          Ok(Token::MinusDot));
-    assert_eq!(parser::main("-.-."), Ok(
-        vec![Token::MinusDot, Token::MinusDot] ) );
+    assert_eq!(parser::lex1("-."), Ok(Token::MinusDot));
+    assert_eq!(parser::main("-.-."),
+        Ok(vec![Token::MinusDot, Token::MinusDot]));
 
-    assert_eq!(parser::lex1("+."),          Ok(Token::PlusDot));
-    assert_eq!(parser::main("+.+."), Ok(
-        vec![Token::PlusDot, Token::PlusDot] ) );
+    assert_eq!(parser::lex1("+."), Ok(Token::PlusDot));
+    assert_eq!(parser::main("+.+."),
+        Ok(vec![Token::PlusDot, Token::PlusDot]));
 
-    assert_eq!(parser::lex1("*."),          Ok(Token::AstDot));
-    assert_eq!(parser::main("*.*."), Ok(
-        vec![Token::AstDot, Token::AstDot] ) );
+    assert_eq!(parser::lex1("*."), Ok(Token::AstDot));
+    assert_eq!(parser::main("*.*."),
+        Ok(vec![Token::AstDot, Token::AstDot]));
 
-    assert_eq!(parser::lex1("/."),          Ok(Token::SlashDot));
-    assert_eq!(parser::main("/./."), Ok(
-        vec![Token::SlashDot, Token::SlashDot] ) );
+    assert_eq!(parser::lex1("/."), Ok(Token::SlashDot));
+    assert_eq!(parser::main("/./."),
+        Ok(vec![Token::SlashDot, Token::SlashDot]));
 
-    assert_eq!(parser::lex1("-"),           Ok(Token::Minus));
-    assert_eq!(parser::main("--"), Ok(
-        vec![Token::Minus, Token::Minus] ) );
+    assert_eq!(parser::lex1("-"),   Ok(Token::Minus));
+    assert_eq!(parser::main("--"),  Ok(vec![Token::Minus, Token::Minus]));
 
-    assert_eq!(parser::lex1("+"),           Ok(Token::Plus));
-    assert_eq!(parser::main("++"), Ok(
-        vec![Token::Plus, Token::Plus] ) );
+    assert_eq!(parser::lex1("+"),   Ok(Token::Plus));
+    assert_eq!(parser::main("++"),  Ok(vec![Token::Plus, Token::Plus]));
 
-    assert_eq!(parser::lex1("="),           Ok(Token::Equal));
-    assert_eq!(parser::main("=="), Ok(
-        vec![Token::Equal, Token::Equal] ) );
+    assert_eq!(parser::lex1("="),   Ok(Token::Equal));
+    assert_eq!(parser::main("=="),  Ok(vec![Token::Equal, Token::Equal]));
 
-    assert_eq!(parser::lex1("<>"),          Ok(Token::LessGreater));
-    assert_eq!(parser::main("<><>"), Ok(
-        vec![Token::LessGreater, Token::LessGreater] ) );
+    assert_eq!(parser::lex1("<>"),  Ok(Token::LessGreater));
+    assert_eq!(parser::main("<><>"),
+        Ok(vec![Token::LessGreater, Token::LessGreater] ) );
 
-    assert_eq!(parser::lex1("<="),          Ok(Token::LessEqual));
-    assert_eq!(parser::main("<=<="), Ok(
-        vec![Token::LessEqual, Token::LessEqual] ) );
+    assert_eq!(parser::lex1("<="),  Ok(Token::LessEqual));
+    assert_eq!(parser::main("<=<="),
+        Ok(vec![Token::LessEqual, Token::LessEqual] ) );
 
-    assert_eq!(parser::lex1(">="),          Ok(Token::GreaterEqual));
-    assert_eq!(parser::main(">=>="), Ok(
-        vec![Token::GreaterEqual, Token::GreaterEqual] ) );
+    assert_eq!(parser::lex1(">="),  Ok(Token::GreaterEqual));
+    assert_eq!(parser::main(">=>="),
+        Ok(vec![Token::GreaterEqual, Token::GreaterEqual] ) );
 
-    assert_eq!(parser::lex1("<"),           Ok(Token::Less));
-    assert_eq!(parser::main("<<"), Ok(
-        vec![Token::Less, Token::Less] ) );
+    assert_eq!(parser::lex1("<"),   Ok(Token::Less));
+    assert_eq!(parser::main("<<"),  Ok(vec![Token::Less, Token::Less]));
 
-    assert_eq!(parser::lex1(">"),           Ok(Token::Greater));
-    assert_eq!(parser::main(">>"), Ok(
-        vec![Token::Greater, Token::Greater] ) );
+    assert_eq!(parser::lex1(">"),   Ok(Token::Greater));
+    assert_eq!(parser::main(">>"),  Ok(vec![Token::Greater, Token::Greater]));
 
-    assert_eq!(parser::lex1(","),           Ok(Token::Comma));
-    assert_eq!(parser::main(",,"), Ok(
-        vec![Token::Comma, Token::Comma] ) );
+    assert_eq!(parser::lex1(","),   Ok(Token::Comma));
+    assert_eq!(parser::main(",,"),  Ok(vec![Token::Comma, Token::Comma]));
 
-    assert_eq!(parser::lex1("_"),           Ok(Token::Ident("_")));
-    assert_eq!(parser::main("__"), Ok(
-        vec![Token::Ident("_"), Token::Ident("_")] ) );
+    assert_eq!(parser::lex1("_"),   Ok(Token::Ident("_")));
+    assert_eq!(parser::main("__"),
+        Ok(vec![Token::Ident("_"), Token::Ident("_")]));
 
-    assert_eq!(parser::lex1("."),           Ok(Token::Dot));
-    assert_eq!(parser::main(".."), Ok(
-        vec![Token::Dot, Token::Dot] ) );
+    assert_eq!(parser::lex1("."),   Ok(Token::Dot));
+    assert_eq!(parser::main(".."),  Ok(vec![Token::Dot, Token::Dot]));
 
-    assert_eq!(parser::lex1(";"),           Ok(Token::Semicolon));
-    assert_eq!(parser::main(";;"), Ok(
-        vec![Token::Semicolon, Token::Semicolon] ) );
-
+    assert_eq!(parser::lex1(";"),   Ok(Token::Semicolon));
+    assert_eq!(parser::main(";;"),
+        Ok(vec![Token::Semicolon, Token::Semicolon]));
 }
 
 #[test]
 fn test_int_literals() {
-    assert_eq!(parser::lit_int("0"), Ok(Token::Int(0)));
-    assert_eq!(parser::lit_int("1"), Ok(Token::Int(1)));
+    assert_eq!(parser::lit_int("0"),    Ok(Token::Int(0)));
+    assert_eq!(parser::lit_int("1"),    Ok(Token::Int(1)));
     assert_eq!(parser::lit_int("1024"), Ok(Token::Int(1024)));
     assert_eq!(parser::lit_int(i32::MAX.to_string().as_str()),
         Ok(Token::Int(i32::MAX)));
@@ -186,20 +176,21 @@ fn test_int_literals() {
 fn test_float_literals() {
     assert!(parser::lit_float("0").is_err());
     assert!(parser::lit_float("1").is_err());
-    assert_eq!(parser::lit_float("0."), Ok(Token::Float(0.0)));
-    assert_eq!(parser::lit_float("1."), Ok(Token::Float(1.0)));
+    assert_eq!(parser::lit_float("0."),     Ok(Token::Float(0.0)));
+    assert_eq!(parser::lit_float("1."),     Ok(Token::Float(1.0)));
     assert_eq!(parser::lit_float("1024.0"), Ok(Token::Float(1024.0)));
-    assert_eq!(parser::lit_float("0.0"), Ok(Token::Float(0.0)));
-    assert_eq!(parser::lit_float("1.0"), Ok(Token::Float(1.0)));
-    assert_eq!(parser::lit_float("8000000000.0"), Ok(Token::Float(8000000000.0)));
+    assert_eq!(parser::lit_float("0.0"),    Ok(Token::Float(0.0)));
+    assert_eq!(parser::lit_float("1.0"),    Ok(Token::Float(1.0)));
+    assert_eq!(parser::lit_float("8000000000.0"),
+        Ok(Token::Float(8000000000.0)));
 
     assert!(parser::lit_float("-1").is_err());
 }
 
 #[test]
 fn test_builtin() {
-    assert_eq!( parser::lex1("Array.create"), Ok(Token::ArrayCreate) );
-    assert_eq!( parser::lex1("Array.make"), Ok(Token::ArrayCreate) );
+    assert_eq!(parser::lex1("Array.create"),    Ok(Token::ArrayCreate));
+    assert_eq!(parser::lex1("Array.make"),      Ok(Token::ArrayCreate));
     // Note: lexer only allows names with lower case
     // will probably change this....
     // assert_eq!(parser::main("Array.blah"), Ok(vec![
@@ -207,7 +198,7 @@ fn test_builtin() {
     //     Token::Dot,
     //     Token::Name(String::from("make")),
     //     ] ) );
-    assert!( parser::lex1("Array.blah").is_err());
+    assert!(parser::lex1("Array.blah").is_err());
 }
 
 #[test]
@@ -220,9 +211,9 @@ fn test_fib() {
 
     use lexer::Token::*;
 
-    let fib         = ||  { Ident("fib") };
-    let n           = ||  { Ident("n") };
-    let print_int   = ||  { Ident("print_int") };
+    let fib         = ||  Ident("fib");
+    let n           = ||  Ident("n");
+    let print_int   = ||  Ident("print_int");
 
     let expected = Ok(vec![
         Let, Rec, fib(), n(), Equal,

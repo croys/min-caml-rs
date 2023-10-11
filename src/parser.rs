@@ -1,9 +1,9 @@
 use peg;
 
 use crate::lexer;
-use crate::lexer::{Token};
+use crate::lexer::Token;
 use crate::syntax;
-use crate::syntax::{Syntax,Fundef};
+use crate::syntax::{Fundef, Syntax};
 use crate::ty::Type;
 
 use Token::*;
@@ -14,8 +14,7 @@ use Token::*;
 // anyway
 //
 
-
-peg::parser!{
+peg::parser! {
     pub grammar parser<'a>() for [Token<'a>] {
 
         pub rule simple_exp( st: () ) -> Box<Syntax> = precedence!{

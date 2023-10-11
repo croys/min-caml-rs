@@ -1,0 +1,6 @@
+# struct_field_align_threshold=20
+
+# ignore=[
+#    "test/lexer.rs",
+#    "test/parser.rs"
+#]
