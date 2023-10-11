@@ -10,13 +10,12 @@ peg::parser! {
     pub grammar parser<'a>() for [Token<'a>] {
 
         pub rule simple_exp(st:()) -> Box<Syntax> = precedence!{
-            [LParen] [RParen]           { Box::new(Syntax::Unit) }
-            [Bool(x)]                   { Box::new(Syntax::Bool(x)) }
-            [Int(x)]                    { Box::new(Syntax::Int(x)) }
-            [Float(x)]                  { Box::new(Syntax::Float(x)) }
+            [LParen] [RParen]   { Box::new(Syntax::Unit) }
+            [Bool(x)]           { Box::new(Syntax::Bool(x)) }
+            [Int(x)]            { Box::new(Syntax::Int(x)) }
+            [Float(x)]          { Box::new(Syntax::Float(x)) }
             // FIXME: create id
-            [Ident(n)]
-                { Box::new(Syntax::Var(String::from(n))) }
+            [Ident(n)]          { Box::new(Syntax::Var(String::from(n))) }
             [LParen] e:exp(st) [RParen]   { e }
         }
 
@@ -79,14 +78,19 @@ peg::parser! {
                 // FIXME: fresh tmp id
                 Box::new(Syntax::Let((String::from(""), Type::Unit), x, y))
             }
-            [ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
-            {
-                Box::new(Syntax::Array(e0, e1))
-            }
             e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
                 { Box::new(Syntax::Put(e0, e1, e2)) }
             e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
                 { Box::new(Syntax::Get(e0, e1)) }
+            --
+            //[ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
+            [ArrayCreate] e0:simple_exp(st) e1:exp(st)
+            // FIXME: below doesn't work...
+            //[ArrayCreate] e0:exp(st) e1:exp(st)
+            {
+                Box::new(Syntax::Array(e0, e1))
+            }
+            e0:(@) es:(exp(st))+        { Box::new(Syntax::App(e0, es)) }
             --
             x:(@) [Equal] y:@           { Box::new(Syntax::Eq(x, y)) }
             x:(@) [LessGreater] y:@
@@ -108,22 +112,7 @@ peg::parser! {
             [Minus] x:(@)               { Box::new(Syntax::Neg(x)) }
             [MinusDot] x:(@)            { Box::new(Syntax::FNeg(x)) }
             --
-            // [LParen] [RParen]           { Box::new( Syntax::Unit ) }
-            // [Bool(x)]                   { Box::new( Syntax::Bool(x) ) }
-            // [Int(x)]                    { Box::new( Syntax::Int(x) ) }
-            // [Float(x)]                  { Box::new( Syntax::Float(x) ) }
-            // // FIXME: create id
-            // [Ident(n)]
-            //     { Box::new( Syntax::Var( Box::new( () ) ) ) }
-            // [LParen] e:exp( st ) [RParen]   { e }
-            // --
-            e:app_exp(st)               { e }
             e:simple_exp(st)            { e }
         }
-
-        // FIXME: merge with above?
-        pub rule app_exp(st : ()) -> Box<Syntax>
-            = e0:simple_exp(st) es:(exp(st))+ { Box::new(Syntax::App(e0, es)) }
-
     }
 }
