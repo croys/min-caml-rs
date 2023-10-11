@@ -1,5 +1,9 @@
 //use peg;
 
+//
+// Fairly direct translation of tokenizer from parser.mly
+//
+
 use crate::lexer::Token;
 use crate::syntax::{Fundef, Syntax};
 use crate::ty::Type;

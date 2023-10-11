@@ -1,5 +1,6 @@
 //use peg;
 
+//
 // Fairly direct translation of tokenizer from lexer.mll
 //
 
@@ -42,7 +43,7 @@ peg::parser! {
 
     pub grammar parser() for str {
 
-        rule brk() = !['a'..='z' | 'A'..='Z' | '0'..='9' | '_' ]
+        rule brk() = !['a'..='z' | 'A'..='Z' | '0'..='9' | '_']
 
         rule space() -> &'input str
             = s:$([' ' | '\t' | '\n' | '\r']+) { s }
@@ -83,7 +84,7 @@ peg::parser! {
 
         rule name() -> Token<'input>
             = s:$(  ['a'..='z']
-                    ( ['0'..='9' | 'a'..='z'  | 'A'..='Z' | '_']  )*
+                    (['0'..='9' | 'a'..='z'  | 'A'..='Z' | '_'])*
                 )
             { Token::Ident( s ) }
 
@@ -131,6 +132,5 @@ peg::parser! {
         // FIXME: have two lexers, one which preserves comments, one which doesn't?
         // parser would need to accept comments/spaces as well
         // could normalise AST by removing all spaces/comments
-
     }
 }
