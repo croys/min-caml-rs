@@ -2,6 +2,9 @@
 name = "min-caml-rs"
 version = "0.1.0"
 edition = "2021"
+description = "Port of Eijiro Sumii's min-caml compiler to Rust"
+repository = "https://github.com/croys/min-caml-rs"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
