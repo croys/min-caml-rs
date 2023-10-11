@@ -18,8 +18,6 @@ peg::parser! {
             [Ident(n)]
                 { Box::new(Syntax::Var(String::from(n))) }
             [LParen] e:exp(st) [RParen]   { e }
-            e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
-                { Box::new(Syntax::Get(e0, e1)) }
         }
 
         pub rule exp(st : ()) -> Box<Syntax> = precedence!{
@@ -85,12 +83,10 @@ peg::parser! {
             {
                 Box::new(Syntax::Array(e0, e1))
             }
-            e0:simple_exp(st) [Dot] [LParen] e1:exp(st) [RParen]
-                [LessMinus] e2:exp(st)
-            { Box::new(Syntax::Put(e0, e1, e2)) }
-            // e0:(@) [Dot] [LParen] e1:exp( st ) [RParen]
-            //     [LessMinus] e2:exp( st )
-            // { Box::new( Syntax::Put( e0, e1, e2 ) ) }
+            e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
+                { Box::new(Syntax::Put(e0, e1, e2)) }
+            e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
+                { Box::new(Syntax::Get(e0, e1)) }
             --
             x:(@) [Equal] y:@           { Box::new(Syntax::Eq(x, y)) }
             x:(@) [LessGreater] y:@
