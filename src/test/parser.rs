@@ -1,5 +1,6 @@
 use crate::lexer;
 use crate::parser;
+use crate::syntax::Syntax;
 
 use std::fs;
 
@@ -62,6 +63,62 @@ fn test_exp() {
         let syn = parser::parser::exp(&toks, ()).unwrap();
         println!("{:?}", syn);
     }
+}
+
+#[test]
+fn test_prec() {
+    {
+        let toks = lexer::parser::main("123-456+789").unwrap();
+        println!("{:?}", toks);
+        let syn = parser::parser::exp(&toks, ()).unwrap();
+        println!("{:?}", syn);
+
+        // FIXME: helper fns for syntax construction
+        use Syntax::*;
+        assert_eq!(syn, Box::new(Add(
+                Box::new(Sub(Box::new(Int(123)),Box::new(Int(456)))),
+                Box::new(Int(789)))));
+    }
+
+
+    {
+        let toks = lexer::parser::main("f x + 1").unwrap();
+        println!("{:?}", toks);
+        let syn = parser::parser::exp(&toks, ()).unwrap();
+        println!("{:?}", syn);
+
+        // FIXME: helper fns for syntax construction
+        use Syntax::*;
+        assert_eq!(syn,
+            Box::new(Add(
+                Box::new(App(Box::new(Var(String::from("f"))),
+                    vec![Box::new(Var(String::from("x")))])),
+                Box::new(Int(1)))));
+    }
+
+    {
+        let toks = lexer::parser::main("1-2").unwrap();
+        println!("{:?}", toks);
+        let syn = parser::parser::exp(&toks, ()).unwrap();
+        println!("{:?}", syn);
+
+        // FIXME: helper fns for syntax construction
+        use Syntax::*;
+        assert_eq!(syn, Box::new(Sub(Box::new(Int(1)), Box::new(Int(2)))));
+    }
+
+    {
+        let toks = lexer::parser::main("1+-2").unwrap();
+        println!("{:?}", toks);
+        let syn = parser::parser::exp(&toks, ()).unwrap();
+        println!("{:?}", syn);
+
+        // FIXME: helper fns for syntax construction
+        use Syntax::*;
+        assert_eq!(syn, Box::new(Add(Box::new(Int(1)),
+            Box::new(Neg(Box::new(Int(2)))))));
+    }
+
 }
 
 #[test]

@@ -20,7 +20,7 @@ peg::parser! {
             [Float(x)]          { Box::new(Syntax::Float(x)) }
             // FIXME: create id
             [Ident(n)]          { Box::new(Syntax::Var(String::from(n))) }
-            [LParen] e:exp(st) [RParen]   { e }
+            [LParen] e:exp(st) [RParen] { e }
         }
 
         pub rule exp(st : ()) -> Box<Syntax> = precedence!{
@@ -67,10 +67,8 @@ peg::parser! {
                         }).collect(),
                     e0, e1))
             }
-            // FIXME: This corresponse to the `elems` rule in parser.mly
-            // which doesn't require the parentheses...
-            // [LParen] e0:exp( st ) [Comma]
-            //     es:(exp(st) ++ [Comma]) [RParen]
+            // Note: no parenthesis... simple_exp covers this, so
+            // (a,b,c,...) is valid, but so is a,b,c...
             e0:(@) [Comma] es:(exp(st) ++ [Comma])
                 {
                     let mut vec = Vec::new();
@@ -83,17 +81,6 @@ peg::parser! {
                 // FIXME: fresh tmp id
                 Box::new(Syntax::Let((String::from(""), Type::Unit), x, y))
             }
-            --
-            [ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
-            //[ArrayCreate] e0:exp(st) e1:exp(st)
-            // FIXME: above doesn't work as there is ambiguity
-            // with function application.
-            // Why not just have ArrayCreate as an expression, then
-            // rely on function application?
-            {
-                Box::new(Syntax::Array(e0, e1))
-            }
-            e0:(@) es:(exp(st))+        { Box::new(Syntax::App(e0, es)) }
             --
             e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
                 { Box::new(Syntax::Put(e0, e1, e2)) }
@@ -117,10 +104,22 @@ peg::parser! {
             x:(@) [AstDot] y:@          { Box::new(Syntax::FMul(x, y)) }
             x:(@) [SlashDot] y:@        { Box::new(Syntax::FDiv(x, y)) }
             --
-            [Minus] x:(@)               { Box::new(Syntax::Neg(x)) }
-            [MinusDot] x:(@)            { Box::new(Syntax::FNeg(x)) }
-            --
             e:simple_exp(st)            { e }
+            --
+            [ArrayCreate] e0:simple_exp(st) e1:simple_exp(st)
+            //[ArrayCreate] e0:exp(st) e1:exp(st)
+            // FIXME: above doesn't work as there is ambiguity
+            // with function application.
+            // Why not just have ArrayCreate as an expression, then
+            // rely on function application?
+            {
+                Box::new(Syntax::Array(e0, e1))
+            }
+            //e0:(@) es:(exp(st))+      { Box::new(Syntax::App(e0, es)) }
+            e0:(@) es:(simple_exp(st))+ { Box::new(Syntax::App(e0, es)) }
+            --
+            [Minus] x:(simple_exp(st))      { Box::new(Syntax::Neg(x)) }
+            [MinusDot] x:(simple_exp(st))   { Box::new(Syntax::FNeg(x)) }
         }
     }
 }
