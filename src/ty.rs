@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code)] // FIXME:
 pub enum Type {
     Unit,
     Bool,
@@ -10,10 +10,9 @@ pub enum Type {
     Fun(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
-    Var(RefCell<Box<Option<Type>>>),
+    Var(RefCell<Box<Option<Type>>>), // FIXME: should probably be Rc<Cell<>>
 }
 
-#[allow(dead_code)]
 pub fn gentyp() -> Type {
     Type::Var(RefCell::new(Box::new(None)))
 }

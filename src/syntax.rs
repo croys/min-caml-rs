@@ -27,6 +27,7 @@ pub enum Syntax {
     Gt(Box<Syntax>, Box<Syntax>), // note: addition
     Le(Box<Syntax>, Box<Syntax>),
     Ge(Box<Syntax>, Box<Syntax>), // note: addition
+    // FIXME: Ne (not equal)?
     If(Box<Syntax>, Box<Syntax>, Box<Syntax>),
     Let((String /* Id */, Type), Box<Syntax>, Box<Syntax>),
     Var(String /* Id */),
