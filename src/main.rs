@@ -13,6 +13,7 @@ mod lexer;
 mod parser;
 mod syntax;
 mod ty;
+mod typing;
 
 #[cfg(test)]
 mod test;

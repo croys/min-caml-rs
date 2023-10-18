@@ -6,9 +6,13 @@
 
 use crate::lexer::Token;
 use crate::syntax::{Fundef, Syntax};
+use crate::ty;
 use crate::ty::Type;
-
 use Token::*;
+
+fn addtyp(n : &str) -> (String, Type) {
+    (String::from(n), ty::gentyp())
+}
 
 peg::parser! {
     pub grammar parser<'a>() for [Token<'a>] {
@@ -30,12 +34,10 @@ peg::parser! {
                 [In] e1:exp(st)
                 {
                     Box::new(Syntax::LetRec(Fundef {
-                            // FIXME: fresh tyvar
-                            name : (String::from(n), Type::Var(None)),
+                            name : addtyp(n),
                             args : formal_args.into_iter().map(|tok| {
                                     if let Ident(x) = tok {
-                                        // FIXME: ID, fresh tyvar
-                                        (String::from(x), Type::Var(None))
+                                        addtyp(x)
                                     } else {
                                         unreachable!()
                                     }
@@ -48,9 +50,7 @@ peg::parser! {
                 // can use with immutable data structs for e.g. environment
                 //[In] e1:(exp( { let st2 = (); st2 } ))
                 [In] e1:exp(st)
-                // FIXME: fresh type var
-                { Box::new(Syntax::Let((String::from(n), Type::Var(None)),
-                    e0, e1))
+                { Box::new(Syntax::Let(addtyp(n), e0, e1))
                 }
             [Let] [LParen] ids:([Ident(_)] **<2,> [Comma]) [RParen]
                 [Equal] e0:exp(st) [In] e1:exp(st)
@@ -60,7 +60,7 @@ peg::parser! {
                     ids.into_iter().map(|tok| {
                             // FIXME: Id, fresh tyvar
                             if let Ident(x) = tok {
-                                (String::from(x), Type::Var(None))
+                                addtyp(x)
                             } else {
                                 unreachable!()
                             }
