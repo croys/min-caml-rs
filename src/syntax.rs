@@ -8,7 +8,6 @@ pub struct Fundef {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-#[allow(clippy::vec_box)]
 pub enum Syntax {
     Unit,
     Bool(bool),
@@ -32,8 +31,8 @@ pub enum Syntax {
     Let((String /* Id */, Type), Box<Syntax>, Box<Syntax>),
     Var(String /* Id */),
     LetRec(Fundef, Box<Syntax>),
-    App(Box<Syntax>, Vec<Box<Syntax>>),
-    Tuple(Vec<Box<Syntax>>),
+    App(Box<Syntax>, Vec<Syntax>),
+    Tuple(Vec<Syntax>),
     LetTuple(Vec<(String /* Id */, Type)>, Box<Syntax>, Box<Syntax>),
     Array(Box<Syntax>, Box<Syntax>),
     Get(Box<Syntax>, Box<Syntax>),

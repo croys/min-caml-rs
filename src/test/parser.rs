@@ -75,9 +75,9 @@ fn test_prec() {
 
         // FIXME: helper fns for syntax construction
         use Syntax::*;
-        assert_eq!(syn, Box::new(Add(
+        assert_eq!(syn, Add(
                 Box::new(Sub(Box::new(Int(123)),Box::new(Int(456)))),
-                Box::new(Int(789)))));
+                Box::new(Int(789))));
     }
 
 
@@ -89,11 +89,10 @@ fn test_prec() {
 
         // FIXME: helper fns for syntax construction
         use Syntax::*;
-        assert_eq!(syn,
-            Box::new(Add(
+        assert_eq!(syn, Add(
                 Box::new(App(Box::new(Var(String::from("f"))),
-                    vec![Box::new(Var(String::from("x")))])),
-                Box::new(Int(1)))));
+                    vec![Var(String::from("x"))])),
+                Box::new(Int(1))));
     }
 
     {
@@ -104,7 +103,7 @@ fn test_prec() {
 
         // FIXME: helper fns for syntax construction
         use Syntax::*;
-        assert_eq!(syn, Box::new(Sub(Box::new(Int(1)), Box::new(Int(2)))));
+        assert_eq!(syn, Sub(Box::new(Int(1)), Box::new(Int(2))));
     }
 
     {
@@ -115,8 +114,7 @@ fn test_prec() {
 
         // FIXME: helper fns for syntax construction
         use Syntax::*;
-        assert_eq!(syn, Box::new(Add(Box::new(Int(1)),
-            Box::new(Neg(Box::new(Int(2)))))));
+        assert_eq!(syn, Add(Box::new(Int(1)), Box::new(Neg(Box::new(Int(2))))));
     }
 
 }
