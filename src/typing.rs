@@ -41,14 +41,14 @@ impl std::fmt::Display for Error {
 // unique id on construction, then modifying a map of id -> Box<Type>,
 // leaving the type value untouched
 //
-pub fn deref_typ(ty : &mut Type) -> Type
-{
+#[allow(dead_code)]
+pub fn deref_typ(ty: &mut Type) -> Type {
     match ty {
-        Type::Fun(t1s, t2) =>
-                        Type::Fun(t1s.iter_mut().map(deref_typ).collect(),
-                        Box::new(deref_typ(t2))),
-        Type::Tuple(ts) =>
-            Type::Tuple(ts.iter_mut().map(deref_typ).collect()),
+        Type::Fun(t1s, t2) => Type::Fun(
+            t1s.iter_mut().map(deref_typ).collect(),
+            Box::new(deref_typ(t2)),
+        ),
+        Type::Tuple(ts) => Type::Tuple(ts.iter_mut().map(deref_typ).collect()),
         Type::Array(t) => Type::Array(Box::new(deref_typ(t))),
         Type::Var(r) => {
             let mut x = r.borrow_mut();
@@ -57,7 +57,7 @@ pub fn deref_typ(ty : &mut Type) -> Type
                     // FIXME: log
                     **x = Some(Type::Int);
                     Type::Int
-                },
+                }
                 Some(t) => {
                     let t_ = deref_typ(t);
                     **x = Some(t_.clone());
@@ -65,7 +65,7 @@ pub fn deref_typ(ty : &mut Type) -> Type
                 }
             }
         }
-        t => t.clone()
+        t => t.clone(),
     }
 }
 

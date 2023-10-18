@@ -10,7 +10,7 @@ use crate::ty;
 use crate::ty::Type;
 use Token::*;
 
-fn addtyp(n : &str) -> (String, Type) {
+fn addtyp(n: &str) -> (String, Type) {
     (String::from(n), ty::gentyp())
 }
 
