@@ -23,9 +23,9 @@ pub enum Syntax {
     FMul(Box<Syntax>, Box<Syntax>),
     FDiv(Box<Syntax>, Box<Syntax>),
     Eq(Box<Syntax>, Box<Syntax>),
+    Le(Box<Syntax>, Box<Syntax>),
     Lt(Box<Syntax>, Box<Syntax>), // note: addition
     Gt(Box<Syntax>, Box<Syntax>), // note: addition
-    Le(Box<Syntax>, Box<Syntax>),
     Ge(Box<Syntax>, Box<Syntax>), // note: addition
     // FIXME: Ne (not equal)?
     If(Box<Syntax>, Box<Syntax>, Box<Syntax>),
