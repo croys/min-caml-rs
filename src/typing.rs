@@ -1,6 +1,9 @@
 use crate::syntax::{Fundef, Syntax};
 use crate::ty::Type;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 // Unify exception
 #[derive(Clone, Debug)]
 pub struct Unify(Type, Type);
@@ -50,15 +53,15 @@ pub fn deref_typ(ty: &Type) -> Type {
         Type::Array(t) => Type::Array(Box::new(deref_typ(t))),
         Type::Var(r) => {
             let mut x = r.borrow_mut();
-            match (*x).as_mut() {
+            match &*x {
                 None => {
                     // FIXME: log
-                    **x = Some(Type::Int);
+                    *x = Some(Type::Int);
                     Type::Int
                 }
                 Some(t) => {
                     let t_ = deref_typ(t);
-                    **x = Some(t_.clone());
+                    *x = Some(t_.clone());
                     t_
                 }
             }
@@ -123,15 +126,15 @@ pub fn deref_term(term: &Syntax) -> Syntax {
 }
 
 #[allow(dead_code)] // FIXME:
-pub fn occur(r1: &Option<Type>, t1: &Type) -> bool {
+pub fn occur(r1: &Rc<RefCell<Option<Type>>>, t1: &Type) -> bool {
     use Type::*;
     match t1 {
         Fun(t2s, t2) => t2s.iter().any(|t| occur(r1, t)) || occur(r1, t2),
         Tuple(t2s) => t2s.iter().any(|t| occur(r1, t)),
         Array(t2) => occur(r1, t2),
         // FIXME: check below, want pointer comparison...
-        Var(r2) if r1 == r2.borrow().as_ref() => true,
-        Var(r2) => match r2.borrow().as_ref() {
+        Var(r2) if r1.as_ptr() == r2.as_ptr() => true,
+        Var(r2) => match &*(r2.borrow()) {
             None => false,
             Some(t2) => occur(r1, t2),
         },
@@ -166,36 +169,30 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
             }
         }
         (Array(t1_), Array(t2_)) => unify(t1_, t2_),
-        //(Var(r1), Var(r2)) if r1 == r2 => Ok(()),
-        (Var(r1), Var(r2)) if r1.borrow().as_ref() == r2.borrow().as_ref() => Ok(()),
-        // (Var(r1), _) if matches!(r1.borrow().as_ref(), Some(_)) => {
-        //     if let Some(t1_) = r1.borrow().as_ref() {
-        //         unify(t1_, t2)
-        //     } else {
-        //         unreachable!();
-        //     }
-        // }
-        // (_, r2) if matches!(r2.borrow().as_ref(), Some(_)) => {
-        //     if let Some(t2_) = r2.borrow().as_ref() {
-        //         unify(t1, t2_)
-        //     } else {
-        //         unreachable!();
-        //     }
-        // }
+        (Var(r1), Var(r2)) if r1.as_ptr() == r2.as_ptr() => Ok(()),
         (Var(r1), _) => {
             let mut x = r1.borrow_mut();
-            let y = x.as_mut();
-            match y {
+            match &*x {
                 Some(t1_) => unify(t1_, t2),
-                // FIXME:
-                // NOTE: Caml code is relying on address of ref cell
-                // in equality check for identity of the variable...
-                // what does Rust do here?
                 None => {
-                    if occur(y, t2) {
+                    if occur(r1, t2) {
                         Err(Unify(t1.clone(), t2.clone()))
                     } else {
-                        **x = Some(t2.clone());
+                        *x = Some(t2.clone());
+                        Ok(())
+                    }
+                }
+            }
+        }
+        (_, Var(r2)) => {
+            let mut x = r2.borrow_mut();
+            match &*x {
+                Some(t2_) => unify(t1, t2_),
+                None => {
+                    if occur(r2, t1) {
+                        Err(Unify(t1.clone(), t2.clone()))
+                    } else {
+                        *x = Some(t1.clone());
                         Ok(())
                     }
                 }

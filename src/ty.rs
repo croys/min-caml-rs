@@ -1,7 +1,9 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
-#[allow(dead_code)] // FIXME:
+// FIXME: have full coverage, but still getting clippy warnings. Wut?
+#[allow(dead_code)]
 pub enum Type {
     Unit,
     Bool,
@@ -10,9 +12,11 @@ pub enum Type {
     Fun(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
-    Var(RefCell<Box<Option<Type>>>), // FIXME: should probably be Rc<Cell<>>
+    // Note: original OCaml type is `t option ref`.
+    // The following should give us the same functionality.
+    Var(Rc<RefCell<Option<Type>>>),
 }
 
 pub fn gentyp() -> Type {
-    Type::Var(RefCell::new(Box::new(None)))
+    Type::Var(Rc::new(RefCell::new(None)))
 }
