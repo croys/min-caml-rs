@@ -1,4 +1,5 @@
 use crate::syntax::{Fundef, Syntax};
+use crate::ty;
 use crate::ty::Type;
 
 use std::cell::RefCell;
@@ -46,9 +47,10 @@ impl std::fmt::Display for Error {
 //
 pub fn deref_typ(ty: &Type) -> Type {
     match ty {
-        Type::Fun(t1s, t2) => {
-            Type::Fun(t1s.iter().map(deref_typ).collect(), Box::new(deref_typ(t2)))
-        }
+        Type::Fun(t1s, t2) => Type::Fun(
+            t1s.iter().map(deref_typ).collect(),
+            Box::new(deref_typ(t2)),
+        ),
         Type::Tuple(ts) => Type::Tuple(ts.iter().map(deref_typ).collect()),
         Type::Array(t) => Type::Array(Box::new(deref_typ(t))),
         Type::Var(r) => {
@@ -117,7 +119,9 @@ pub fn deref_term(term: &Syntax) -> Syntax {
         ),
         App(e, es) => App(bdt(e), es.iter().map(deref_term).collect()),
         Tuple(es) => Tuple(es.iter().map(deref_term).collect()),
-        LetTuple(xts, e1, e2) => LetTuple(xts.iter().map(deref_id_typ).collect(), bdt(e1), bdt(e2)),
+        LetTuple(xts, e1, e2) => {
+            LetTuple(xts.iter().map(deref_id_typ).collect(), bdt(e1), bdt(e2))
+        }
         Array(e1, e2) => Array(bdt(e1), bdt(e2)),
         Get(e1, e2) => Get(bdt(e1), bdt(e2)),
         Put(e1, e2, e3) => Put(bdt(e1), bdt(e2), bdt(e3)),
@@ -202,6 +206,122 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
     }
 }
 
-// FIXME: g
+#[allow(dead_code)] // FIXME:
+
+pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Unify> {
+    // FIXME: ^^^ probably want HashMap<&str, &Type>
+    use Syntax::*;
+    // FIXME: whole block needs to have result captured
+    // to pretty print errors
+    match e {
+        Unit => Ok(Type::Unit),
+        Bool(_) => Ok(Type::Bool),
+        Int(_) => Ok(Type::Int),
+        Float(_) => Ok(Type::Float),
+        Not(e_) => {
+            unify(&Type::Bool, &g(env, e_)?)?;
+            Ok(Type::Bool)
+        }
+        Neg(e_) => {
+            unify(&Type::Int, &g(env, e_)?)?;
+            Ok(Type::Int)
+        }
+        Add(e1, e2) | Sub(e1, e2) => {
+            unify(&Type::Int, &g(env, e1)?)?;
+            unify(&Type::Int, &g(env, e2)?)?;
+            Ok(Type::Int)
+        }
+        FNeg(e_) => {
+            unify(&Type::Float, &g(env, e_)?)?;
+            Ok(Type::Float)
+        }
+        FAdd(e1, e2) | FSub(e1, e2) | FMul(e1, e2) | FDiv(e1, e2) => {
+            unify(&Type::Float, &g(env, e1)?)?;
+            unify(&Type::Float, &g(env, e2)?)?;
+            Ok(Type::Float)
+        }
+        Eq(e1, e2) | Le(e1, e2) | Lt(e1, e2) | Gt(e1, e2) | Ge(e1, e2) => {
+            unify(&g(env, e1)?, &g(env, e2)?)?;
+            Ok(Type::Bool)
+        }
+        If(e1, e2, e3) => {
+            unify(&g(env, e1)?, &Type::Bool)?;
+            let t2 = g(env, e2)?;
+            let t3 = g(env, e3)?;
+            unify(&t2, &t3)?;
+            Ok(t2)
+        }
+        Let((x, t), e1, e2) => {
+            unify(t, &g(env, e1)?)?;
+            let mut env_ = env.clone();
+            env_.insert(x.clone(), t.clone());
+            g(&env_, e2)
+        }
+        Var(x) => {
+            let ent = env.get(x);
+            match ent {
+                Some(t) => Ok(t.clone()),
+                None => {
+                    // FIXME: lookup in `extenv`
+                    // below for missing in `extenv`
+                    // FIXME: log
+                    // Format.eprintf "free variable %s assumed as external@." x;
+                    let t = ty::gentyp();
+                    // FIXME: add to extenv
+                    Ok(t)
+                }
+            }
+        }
+        LetRec(
+            Fundef {
+                name: (x, t),
+                args: yts,
+                body: e1,
+            },
+            e2,
+        ) => {
+            let mut env2 = env.clone();
+            env2.insert(x.clone(), t.clone());
+            {
+                let mut env3 = env.clone();
+                for (y, t) in yts {
+                    env3.insert(y.clone(), t.clone());
+                }
+                let fun_ty = Type::Fun(
+                    yts.iter().map(|(_, t)| t.clone()).collect(),
+                    Box::new(g(&env3, e1)?),
+                );
+                unify(t, &fun_ty)?;
+            }
+            g(&env2, e2)
+        }
+        App(e_, es) => {
+            let res_t = Box::new(ty::gentyp());
+            let arg_tys_res: Result<Vec<Type>, Unify> =
+                es.iter().map(|t| g(env, t)).collect();
+            let fun_t = Type::Fun(arg_tys_res?, res_t.clone());
+            unify(&g(env, e_)?, &fun_t)?;
+            Ok(*res_t)
+        }
+        Tuple(es) => {
+            let tys_res: Result<Vec<Type>, Unify> =
+                es.iter().map(|t| g(env, t)).collect();
+            Ok(Type::Tuple(tys_res?))
+        }
+        // LetTuple(xts, e1, e2) => {
+        //     unimplemented!()
+        // }
+        // Array(e1, e2) => {
+        //     unimplemented!()
+        // }
+        // Get(e1, e2) => {
+        //     unimplemented!()
+        // }
+        // Put(e1, e2, e3) => {
+        //     unimplemented!()
+        // }
+        _ => unimplemented!(),
+    }
+}
 
 // FIXME: f
