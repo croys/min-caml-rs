@@ -5,6 +5,11 @@ use crate::typing;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+
+fn tyvar(ty: Option<Type>) -> Type {
+    Type::Var(Rc::new(RefCell::new(ty.clone())))
+}
+
 // Note: This project is for me to learn Rust. I'll use this
 // as a little scratch pad to test my understanding of language/library
 // semantics/behaviour.
@@ -57,7 +62,7 @@ fn test_deref_typ() {
         println!("var_ty: {:?}", var_ty);
         println!("var_ty2: {:?}", var_ty2);
 
-        let expected_var_ty = Type::Var(Rc::new(RefCell::new(Some(Type::Int))));
+        let expected_var_ty = tyvar(Some(Type::Int));
         assert_eq!(expected_var_ty, var_ty);
         assert_eq!(Type::Int, var_ty2);
 
@@ -70,13 +75,13 @@ fn test_deref_typ() {
 
     // test bound tyvar
     {
-        let var_ty = Type::Var(Rc::new(RefCell::new(Some(Type::Float))));
+        let var_ty = tyvar(Some(Type::Float));
         let var_ty2 = typing::deref_typ(&var_ty);
 
         println!("var_ty: {:?}", var_ty);
         println!("var_ty2: {:?}", var_ty2);
 
-        let expected_var_ty = Type::Var(Rc::new(RefCell::new(Some(Type::Float))));
+        let expected_var_ty = tyvar(Some(Type::Float));
         assert_eq!(expected_var_ty, var_ty);
         assert_eq!(Type::Float, var_ty2);
 
@@ -96,8 +101,7 @@ fn test_deref_typ() {
         println!("var_ty: {:?}", var_ty);
         println!("var_ty2: {:?}", var_ty2);
 
-        let expected_var_ty = Type::Array(Box::new(
-            Type::Var(Rc::new(RefCell::new(Some(Type::Int))))));
+        let expected_var_ty = Type::Array(Box::new(tyvar(Some(Type::Int))));
         assert_eq!(expected_var_ty, var_ty);
         assert_eq!(Type::Array(Box::new(Type::Int)), var_ty2);
     }
@@ -105,19 +109,16 @@ fn test_deref_typ() {
 
     // test bound tyvar under constructor
     {
-        let var_ty = Type::Array(Box::new(
-            Type::Var(Rc::new(RefCell::new(Some(Type::Float))))));
+        let var_ty = Type::Array(Box::new(tyvar(Some(Type::Float))));
         println!("var_ty: {:?}", var_ty);
         let var_ty2 = typing::deref_typ(&var_ty);
 
         println!("var_ty: {:?}", var_ty);
         println!("var_ty2: {:?}", var_ty2);
 
-        let expected_var_ty = Type::Array(Box::new(
-            Type::Var(Rc::new(RefCell::new(Some(Type::Float))))));
+        let expected_var_ty = Type::Array(Box::new(tyvar(Some(Type::Float))));
         assert_eq!(expected_var_ty, var_ty);
         assert_eq!(Type::Array(Box::new(Type::Float)), var_ty2);
     }
-
 
 }
