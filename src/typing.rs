@@ -5,6 +5,12 @@ use crate::ty::Type;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+// Note: this design does the substitutions in place.
+// Could return substitution as a value, referring to tyvars via
+// de-Bruujin indices.
+//
+// With current design, can do a deep copy of Type before inference/unification.
+
 // Unify exception
 #[derive(Clone, Debug)]
 pub struct Unify(Type, Type);
@@ -207,52 +213,61 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
 }
 
 #[allow(dead_code)] // FIXME:
-
-pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Unify> {
+pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Error> {
     // FIXME: ^^^ probably want HashMap<&str, &Type>
     use Syntax::*;
     // FIXME: whole block needs to have result captured
     // to pretty print errors
+
+    let unify_ = |t1: &Type, t2: &Type| -> Result<(), Error> {
+        match unify(t1, t2) {
+            Ok(t) => Ok(t),
+            Err(Unify(t1, t2)) => {
+                Err(Error(deref_term(e), deref_typ(&t1), deref_typ(&t2)))
+            }
+        }
+    };
+
     match e {
         Unit => Ok(Type::Unit),
         Bool(_) => Ok(Type::Bool),
         Int(_) => Ok(Type::Int),
         Float(_) => Ok(Type::Float),
         Not(e_) => {
-            unify(&Type::Bool, &g(env, e_)?)?;
+            unify_(&Type::Bool, &g(env, e_)?)?;
             Ok(Type::Bool)
         }
         Neg(e_) => {
-            unify(&Type::Int, &g(env, e_)?)?;
+            unify_(&Type::Int, &g(env, e_)?)?;
             Ok(Type::Int)
         }
         Add(e1, e2) | Sub(e1, e2) => {
-            unify(&Type::Int, &g(env, e1)?)?;
-            unify(&Type::Int, &g(env, e2)?)?;
+            unify_(&Type::Int, &g(env, e1)?)?;
+            unify_(&Type::Int, &g(env, e2)?)?;
             Ok(Type::Int)
         }
         FNeg(e_) => {
-            unify(&Type::Float, &g(env, e_)?)?;
+            unify_(&Type::Float, &g(env, e_)?)?;
             Ok(Type::Float)
         }
         FAdd(e1, e2) | FSub(e1, e2) | FMul(e1, e2) | FDiv(e1, e2) => {
-            unify(&Type::Float, &g(env, e1)?)?;
-            unify(&Type::Float, &g(env, e2)?)?;
+            unify_(&Type::Float, &g(env, e1)?)?;
+            unify_(&Type::Float, &g(env, e2)?)?;
             Ok(Type::Float)
         }
         Eq(e1, e2) | Le(e1, e2) | Lt(e1, e2) | Gt(e1, e2) | Ge(e1, e2) => {
-            unify(&g(env, e1)?, &g(env, e2)?)?;
+            unify_(&g(env, e1)?, &g(env, e2)?)?;
             Ok(Type::Bool)
         }
         If(e1, e2, e3) => {
-            unify(&g(env, e1)?, &Type::Bool)?;
+            unify_(&g(env, e1)?, &Type::Bool)?;
             let t2 = g(env, e2)?;
             let t3 = g(env, e3)?;
-            unify(&t2, &t3)?;
+            unify_(&t2, &t3)?;
             Ok(t2)
         }
         Let((x, t), e1, e2) => {
-            unify(t, &g(env, e1)?)?;
+            unify_(t, &g(env, e1)?)?;
             let mut env_ = env.clone();
             env_.insert(x.clone(), t.clone());
             g(&env_, e2)
@@ -291,36 +306,55 @@ pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Unify> {
                     yts.iter().map(|(_, t)| t.clone()).collect(),
                     Box::new(g(&env3, e1)?),
                 );
-                unify(t, &fun_ty)?;
+                unify_(t, &fun_ty)?;
             }
             g(&env2, e2)
         }
         App(e_, es) => {
             let res_t = Box::new(ty::gentyp());
-            let arg_tys_res: Result<Vec<Type>, Unify> =
+            let arg_tys_res: Result<Vec<Type>, Error> =
                 es.iter().map(|t| g(env, t)).collect();
             let fun_t = Type::Fun(arg_tys_res?, res_t.clone());
-            unify(&g(env, e_)?, &fun_t)?;
+            unify_(&g(env, e_)?, &fun_t)?;
             Ok(*res_t)
         }
         Tuple(es) => {
-            let tys_res: Result<Vec<Type>, Unify> =
+            let tys_res: Result<Vec<Type>, Error> =
                 es.iter().map(|t| g(env, t)).collect();
             Ok(Type::Tuple(tys_res?))
         }
-        // LetTuple(xts, e1, e2) => {
-        //     unimplemented!()
-        // }
-        // Array(e1, e2) => {
-        //     unimplemented!()
-        // }
-        // Get(e1, e2) => {
-        //     unimplemented!()
-        // }
-        // Put(e1, e2, e3) => {
-        //     unimplemented!()
-        // }
-        _ => unimplemented!(),
+        LetTuple(xts, e1, e2) => {
+            // Note: two separate tuples of names and types
+            // would be more efficient
+            unify_(
+                &Type::Tuple(xts.iter().map(|(_x, t)| t.clone()).collect()),
+                &g(env, e1)?,
+            )?;
+            // Note: original code does inference on xts
+            // unification will have updated any free tyvars
+            let mut env2 = env.clone();
+            for (x, t) in xts {
+                env2.insert(x.clone(), t.clone());
+            }
+            g(&env2, e2)
+        }
+        Array(e1, e2) => {
+            // original note: must be a primitive for "polymorphic" typing
+            unify_(&g(env, e1)?, &Type::Int)?;
+            Ok(Type::Array(Box::new(g(env, e2)?)))
+        }
+        Get(e1, e2) => {
+            let t = ty::gentyp();
+            unify_(&Type::Array(Box::new(t.clone())), &g(env, e1)?)?;
+            unify_(&Type::Int, &g(env, e2)?)?;
+            Ok(t)
+        }
+        Put(e1, e2, e3) => {
+            let t = g(env, e3)?;
+            unify_(&Type::Array(Box::new(t.clone())), &g(env, e1)?)?;
+            unify_(&Type::Int, &g(env, e2)?)?;
+            Ok(Type::Unit)
+        }
     }
 }
 
