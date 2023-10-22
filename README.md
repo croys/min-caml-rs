@@ -27,6 +27,11 @@ Min-caml is an educational compiler for a subset of OCaml, written in OCaml by E
 The intention is to provide LLVM and WebAssembly backends, not native
 backends as per the original project.
 
+This is largely being done as an exercise to learn Rust.
+It will be a fairly direct port, with major module, type and function names
+remaining the same, with a structure as close to the original OCaml code as
+possible.
+
 ## Roadmap
 
 * Lexer
@@ -41,6 +46,7 @@ backends as per the original project.
 * unnecessary definition elimination
 * Closure Conversion
 * Code generation
+* System library
 
 <!--
 ## Installation
