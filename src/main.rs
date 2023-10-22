@@ -9,6 +9,7 @@
 //
 //
 mod id;
+mod k_normal;
 mod lexer;
 mod parser;
 mod syntax;
