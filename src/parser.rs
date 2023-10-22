@@ -34,6 +34,13 @@ peg::parser! {
             [Float(x)]          { Syntax::Float(x) }
             // FIXME: create id
             [Ident(n)]          { Syntax::Var(String::from(n)) }
+            [LParen] e0:(exp(st)) [Comma] es:(exp(st) ++ [Comma]) [RParen]
+                {
+                    let mut vec = Vec::new();
+                    vec.push(e0);
+                    vec.extend(es);
+                    Syntax::Tuple(vec)
+                }
             [LParen] [RParen]   { Syntax::Unit }
             [LParen] e:exp(st) [RParen] { e }
         }
@@ -104,21 +111,6 @@ peg::parser! {
                         }).collect(),
                     b(e0), b(e1))
             }
-            // FIXME: below is broken
-            // Getting Tuple(x,Tuple(y, ...)) instead of:
-            // Tuple(x,y,...)
-            //
-            // Note: no parentheses... simple_exp covers this, so
-            // (a,b,c,...) is valid, but so is a,b,c...
-            //e0:(@) [Comma] es:(exp(st) ++ [Comma])
-            // FIXME: below works, but should be more general
-            e0:(@) [Comma] es:(simple_exp(st) ++ [Comma])
-                {
-                    let mut vec = Vec::new();
-                    vec.push(e0);
-                    vec.extend(es);
-                    Syntax::Tuple(vec)
-                }
             --
             x:(@) [Equal] y:@           { Syntax::Eq(b(x), b(y)) }
             x:(@) [LessGreater] y:@
