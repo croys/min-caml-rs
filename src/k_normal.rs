@@ -6,7 +6,7 @@ use crate::ty::Type;
 
 //use im;
 
-// K正規化後の式 - k-Normalized expression
+// K正規化後の式 - k-Normalized expression type
 #[derive(Debug, PartialEq, Clone)]
 pub enum T {
     Unit,
@@ -16,8 +16,8 @@ pub enum T {
     Add(id::T, id::T),
     Sub(id::T, id::T),
     FNeg(id::T),
-    FAdd(id::T),
-    FSub(id::T),
+    FAdd(id::T, id::T),
+    FSub(id::T, id::T),
     FMul(id::T, id::T),
     FDiv(id::T, id::T),
     IfEq(id::T, id::T, Box<T>, Box<T>), // 比較 + 分岐 - compare and branch
@@ -41,14 +41,58 @@ pub struct FunDef {
     pub body: Box<T>,
 }
 
+// 式に出現する（自由な）変数
+//
+// FIXME: mincaml has module for the set type...
 pub fn fv(e: T) -> im::hashset::HashSet<id::T> {
-    unimplemented!()
+    type S = im::hashset::HashSet<id::T>;
+    use T::*;
+    match e {
+        Unit | Int(_) | Float(_) | ExtArray(_) => S::new(),
+        Neg(x) | FNeg(x) => S::unit(x),
+        Add(x, y)
+        | Sub(x, y)
+        | FAdd(x, y)
+        | FSub(x, y)
+        | FMul(x, y)
+        | FDiv(x, y)
+        | Get(x, y) => S::from_iter([x, y]),
+        IfEq(x, y, e1, e2) | IfLE(x, y, e1, e2) => {
+            S::from_iter([x, y]) + fv(*e1) + fv(*e2)
+        }
+        Let((x, t), e1, e2) => fv(*e1) + fv(*e2).without(&x),
+        Var(x) => S::unit(x),
+        LetRec(
+            FunDef {
+                name: (x, t),
+                args: yts,
+                body: e1,
+            },
+            e2,
+        ) => {
+            let zs = fv(*e1)
+                .difference(S::from_iter(yts.iter().map(|(x, _)| x.clone())));
+            (zs + fv(*e2)).without(&x)
+        }
+        App(x, ys) => S::from_iter([x].into_iter().chain(ys)),
+        Tuple(xs) | ExtFunApp(_, xs) => S::from_iter(xs),
+        Put(x, y, z) => S::from_iter([x, y, z]),
+        LetTuple(xs, y, e) => {
+            S::unit(y)
+                + fv(*e)
+                    .difference(S::from_iter(xs.into_iter().map(|(x, _)| x)))
+        }
+    }
 }
 
+// letを挿入する補助関数
+//
 pub fn insert_let((e, t): (T, Type), k: &dyn Fn(id::T) -> (T, Type)) -> T {
     unimplemented!()
 }
 
+// K正規化ルーチン本体
+//
 // FIXME: should probably use a type alias/newtype for env
 pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> (T, Type) {
     unimplemented!()
