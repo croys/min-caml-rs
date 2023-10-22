@@ -7,6 +7,42 @@
 --->
 [![CI](https://github.com/croys/min-caml-rs/workflows/CI/badge.svg)](https://github.com/croys/min-caml-rs/actions)
 
+<pre>
+   _                                _
+  (_)                              | |
+  _ __ ___  _ _ __ ______ ___ __ _ _ __ ___ | |______ _ __ ___
+  | '_ ` _ \| | '_ \______/ __/ _` | '_ ` _ \| |______| '__/ __|
+  | | | | | | | | | |    | (_| (_| | | | | | | |      | |  \__ \
+  |_| |_| |_|_|_| |_|     \___\__,_|_| |_| |_|_|      |_|  |___/
+
+</pre>
+
+## About min-caml-rs
+
+This is a port of min-caml from OCaml to Rust.
+
+Min-caml is an educational compiler for a subset of OCaml, written in OCaml by Eijiro Sumii et al: https://github.com/esumii/min-caml
+
+
+The intention is to provide LLVM and WebAssembly backends, not native
+backends as per the original project.
+
+## Roadmap
+
+* Lexer
+* Parser
+* Type inference/checking
+* K-Normalization
+* α-Conversion
+* β-Reduction
+* let-Reduction
+* inline expansion
+* constant folding
+* unnecessary definition elimination
+* Closure Conversion
+* Code generation
+
+<!--
 ## Installation
 
 ### Cargo
@@ -14,6 +50,7 @@
 * Install the rust toolchain in order to have cargo installed by following
   [this](https://www.rust-lang.org/tools/install) guide.
 * run `cargo install min-caml-rs`
+-->
 
 ## License
 
