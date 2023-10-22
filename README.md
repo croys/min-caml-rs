@@ -34,10 +34,10 @@ possible.
 
 ## Roadmap
 
-* Lexer
-* Parser
-* Type inference/checking
-* K-Normalization
+* Lexer - done
+* Parser - done
+* Type inference/checking - mostly done
+* K-Normalization (conversion to SSA form) - in progress
 * α-Conversion
 * β-Reduction
 * let-Reduction
