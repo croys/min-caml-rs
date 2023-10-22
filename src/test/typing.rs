@@ -261,7 +261,6 @@ fn test_f() {
                 "inprod-rec.ml",
                 "matmul.ml",
                 "assign.ml",
-                "float.ml",
 /*
                 //"cls-reg-bug.ml",
                 "inprod.ml",

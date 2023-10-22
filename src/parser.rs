@@ -119,7 +119,12 @@ peg::parser! {
             //e0:(@) es:(exp(st))+      { Box::new(Syntax::App(e0, es)) }
             e0:(@) es:(simple_exp(st))+ { Syntax::App(b(e0), es) }
             --
-            [Minus] x:(simple_exp(st))      { Syntax::Neg(b(x)) }
+            [Minus] x:(simple_exp(st)) {
+                match x {
+                    Syntax::Float(f) => Syntax::Float(-f),
+                    e_ => Syntax::Neg(b(e_)),
+                }
+            }
             [MinusDot] x:(simple_exp(st))   { Syntax::FNeg(b(x)) }
         }
     }
