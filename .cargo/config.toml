@@ -1,0 +1,7 @@
+[env]
+RUST_MIN_STACK = "104857600"
+
+# Note: below does pass down the args,
+# but we still get stack overflows
+#[target.x86_64-unknown-linux-gnu]
+#rustflags = ["-C", "link-args=-Wl,-zstack-size=104857600"]

@@ -82,7 +82,6 @@ pub fn deref_id_typ((x, t): &(String, Type)) -> (String, Type) {
     (x.clone(), deref_typ(t))
 }
 
-#[allow(dead_code)] // FIXME:
 pub fn deref_term(term: &Syntax) -> Syntax {
     // FIXME: Foldable/visitor to avoid this boilerplate?
     use Syntax::*;
@@ -135,7 +134,6 @@ pub fn deref_term(term: &Syntax) -> Syntax {
     }
 }
 
-#[allow(dead_code)] // FIXME:
 pub fn occur(r1: &Rc<RefCell<Option<Type>>>, t1: &Type) -> bool {
     use Type::*;
     match t1 {
@@ -152,7 +150,6 @@ pub fn occur(r1: &Rc<RefCell<Option<Type>>>, t1: &Type) -> bool {
     }
 }
 
-#[allow(dead_code)] // FIXME:
 pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
     use std::iter::zip;
     use Type::*;
@@ -212,7 +209,6 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
     }
 }
 
-#[allow(dead_code)] // FIXME:
 pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Error> {
     // FIXME: ^^^ probably want HashMap<&str, &Type>
     use Syntax::*;
@@ -313,14 +309,14 @@ pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Error> {
         App(e_, es) => {
             let res_t = Box::new(ty::gentyp());
             let arg_tys_res: Result<Vec<Type>, Error> =
-                es.iter().map(|t| g(env, t)).collect();
+                es.iter().map(|x| g(env, x)).collect();
             let fun_t = Type::Fun(arg_tys_res?, res_t.clone());
             unify_(&g(env, e_)?, &fun_t)?;
             Ok(*res_t)
         }
         Tuple(es) => {
             let tys_res: Result<Vec<Type>, Error> =
-                es.iter().map(|t| g(env, t)).collect();
+                es.iter().map(|x| g(env, x)).collect();
             Ok(Type::Tuple(tys_res?))
         }
         LetTuple(xts, e1, e2) => {
@@ -358,4 +354,18 @@ pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Error> {
     }
 }
 
-// FIXME: f
+#[allow(dead_code)] // FIXME:
+pub fn f(e: &Syntax) -> Result<Syntax, Box<dyn std::error::Error>> {
+    // FIXME: initialise extenv
+
+    let env = im::HashMap::new();
+    match unify(&Type::Unit, &g(&env, e)?) {
+        Ok(_) => {
+            // FIXME: deref_typ each type in extmap
+            Ok(deref_term(e))
+        }
+        Err(_err) => Err(Box::<dyn std::error::Error>::from(
+            "top level does not have type unit".to_string(),
+        )),
+    }
+}
