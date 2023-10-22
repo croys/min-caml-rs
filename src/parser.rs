@@ -18,20 +18,57 @@ fn b(x: Syntax) -> Box<Syntax> {
     Box::new(x)
 }
 
+fn dot_accesses_tree(es: Vec<Syntax>) -> Syntax {
+    es[1..]
+        .iter()
+        .fold(es[0].clone(), |x, y| Syntax::Get(b(x), b(y.clone())))
+}
+
 peg::parser! {
     pub grammar parser<'a>() for [Token<'a>] {
 
+        // FIXME: doesn't need to be precedence any more?
         pub rule simple_exp(st:()) -> Syntax = precedence!{
-            [LParen] [RParen]   { Syntax::Unit }
             [Bool(x)]           { Syntax::Bool(x) }
             [Int(x)]            { Syntax::Int(x) }
             [Float(x)]          { Syntax::Float(x) }
             // FIXME: create id
             [Ident(n)]          { Syntax::Var(String::from(n)) }
+            [LParen] [RParen]   { Syntax::Unit }
             [LParen] e:exp(st) [RParen] { e }
         }
 
+        pub rule dot_access(st: ()) -> Syntax =
+            [Dot] [LParen] e:(exp(st)) [RParen] { e }
+
+        pub rule dot_accesses(st: ()) -> Vec<Syntax> =
+            e0:(simple_exp(st)) es:(dot_access(st)+) {
+                let mut v = Vec::new();
+                v.push(e0);
+                v.extend(es);
+                v
+            }
         pub rule exp(st : ()) -> Syntax = precedence!{
+            x:(@) [Semicolon] y:@
+            {
+                // FIXME: fresh tmp id
+                Syntax::Let((String::from(""), Type::Unit), b(x), b(y))
+            }
+            --
+            // FIXME: should be high precedence
+            es:dot_accesses(st) [LessMinus] e2:@ {
+                let mut es_ = es.clone();
+                es_.truncate(es.len()-1);
+                Syntax::Put(
+                    b(dot_accesses_tree(es_)),
+                    b(es[es.len()-1].clone()),
+                    b(e2),
+                )
+            }
+            es:dot_accesses(st) {
+                dot_accesses_tree(es)
+            }
+            --
             [If] x:(exp(st)) [Then] y:(exp(st)) [Else] z:(exp(st))
                 { Syntax::If(b(x), b(y), b(z)) }
             [Let] [Rec] [Ident(n)] formal_args:[Ident(_)]+ [Equal] e0:exp(st)
@@ -48,11 +85,10 @@ peg::parser! {
                             body : b(e0) },
                         b(e1))
                 }
-            [Let] [Ident(n)] [Equal] e0:(exp(st))
+            [Let] [Ident(n)] [Equal] e0:(exp(st)) [In] e1:exp(st)
                 // note: below is how to add state
                 // can use with immutable data structs for e.g. environment
                 //[In] e1:(exp( { let st2 = (); st2 } ))
-                [In] e1:exp(st)
                 { Syntax::Let(addtyp(n), b(e0), b(e1)) }
             [Let] [LParen] ids:([Ident(_)] **<2,> [Comma]) [RParen]
                 [Equal] e0:exp(st) [In] e1:exp(st)
@@ -68,25 +104,21 @@ peg::parser! {
                         }).collect(),
                     b(e0), b(e1))
             }
-            // Note: no parenthesis... simple_exp covers this, so
+            // FIXME: below is broken
+            // Getting Tuple(x,Tuple(y, ...)) instead of:
+            // Tuple(x,y,...)
+            //
+            // Note: no parentheses... simple_exp covers this, so
             // (a,b,c,...) is valid, but so is a,b,c...
-            e0:(@) [Comma] es:(exp(st) ++ [Comma])
+            //e0:(@) [Comma] es:(exp(st) ++ [Comma])
+            // FIXME: below works, but should be more general
+            e0:(@) [Comma] es:(simple_exp(st) ++ [Comma])
                 {
                     let mut vec = Vec::new();
                     vec.push(e0);
                     vec.extend(es);
                     Syntax::Tuple(vec)
                 }
-            x:(@) [Semicolon] y:@
-            {
-                // FIXME: fresh tmp id
-                Syntax::Let((String::from(""), Type::Unit), b(x), b(y))
-            }
-            --
-            e0:(@) [Dot] [LParen] e1:exp(st) [RParen] [LessMinus] e2:exp(st)
-                { Syntax::Put(b(e0), b(e1), b(e2)) }
-            e0:(@) [Dot] [LParen] e1:exp(st) [RParen]
-                { Syntax::Get(b(e0), b(e1)) }
             --
             x:(@) [Equal] y:@           { Syntax::Eq(b(x), b(y)) }
             x:(@) [LessGreater] y:@
@@ -116,7 +148,9 @@ peg::parser! {
             {
                 Syntax::Array(b(e0), b(e1))
             }
+            // FIXME: app should use another rule
             //e0:(@) es:(exp(st))+      { Box::new(Syntax::App(e0, es)) }
+            //e0:(@) (es:@)+      { Syntax::App(b(e0), es) }
             e0:(@) es:(simple_exp(st))+ { Syntax::App(b(e0), es) }
             --
             [Minus] x:(simple_exp(st)) {

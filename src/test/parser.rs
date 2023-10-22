@@ -170,7 +170,72 @@ fn test_ml() {
             println!("{:?}", tokens);
 
             let syn = parser::parser::exp(&tokens, ());
-            println!("{:?}", syn.unwrap());
+            println!("{:?}", syn);
+            assert!(syn.is_ok());
         }
     }
+}
+
+#[test]
+fn test_assign() {
+    let code = r#"
+        let a = Array.make 2 0 in
+        a.(0) <- 1;
+        a.(1) <- 2
+    "#;
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn = parser::parser::exp(&tokens, ()).unwrap();
+    println!("{:?}", syn);
+}
+
+#[test]
+fn test_assign_2() {
+    let code = r#"
+        let a = Array.make 2 2 in
+        a.(0).(0) <- 0;
+        a.(0).(1) <- 1;
+        a.(1).(0) <- 2;
+        a.(1).(1) <- 3
+    "#;
+
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn = parser::parser::exp(&tokens, ()).unwrap();
+    println!("{:?}", syn);
+}
+
+
+#[test]
+fn test_assign_3() {
+    let code = r#"
+        c.(i).(j) <- c.(i).(j) +. a.(i).(k) *. b.(k).(j)
+    "#;
+
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn = parser::parser::exp(&tokens, ()).unwrap();
+    println!("{:?}", syn);
+}
+
+
+#[test]
+fn test_matmul() {
+    let contents = fs::read_to_string("src/test/ml/matmul.ml")
+        .expect("unable to read 'matmul.ml'");
+
+    let res = lexer::parser::main(&contents);
+    assert!(res.is_ok());
+
+    let tokens = res.unwrap();
+    println!("{:?}", tokens);
+
+    let syn_res = parser::parser::exp(&tokens, ());
+    println!("{:?}", syn_res);
+    assert!(syn_res.is_ok());
+    let syn = syn_res.unwrap();
+    println!("{:?}", syn);
 }

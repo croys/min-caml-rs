@@ -251,8 +251,8 @@ fn test_f() {
         let path = entry.unwrap().path();
 
         // FIXME: WIP - ignore these tests for now due to bugs in parser
-        if true {
-            let ignore_tests = vec![
+        if false {
+            let ignore_tests = [
                 "inprod-loop.ml",
                 "matmul-flat.ml",
                 "non-tail-if2.ml",
@@ -261,11 +261,6 @@ fn test_f() {
                 "inprod-rec.ml",
                 "matmul.ml",
                 "assign.ml",
-/*
-                //"cls-reg-bug.ml",
-                "inprod.ml",
-                //"float.ml",
-*/
             ];
             if ignore_tests.iter().any(|t| path.ends_with(t)) {
                 continue;
@@ -295,7 +290,6 @@ fn test_f() {
 }
 
 // FIXME: remove
-#[ignore]
 #[test]
 fn test_assign_ml() {
     let contents = fs::read_to_string("src/test/ml/assign.ml")
