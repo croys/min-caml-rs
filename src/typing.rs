@@ -39,7 +39,10 @@ impl std::fmt::Display for Error {
     }
 }
 
-// FIXME: extenv
+thread_local! {
+    pub static EXTENV : RefCell<std::collections::HashMap<id::T, Type>> =
+    RefCell::new(std::collections::HashMap::new())
+}
 
 // for pretty printing (and type normalization)
 //
@@ -179,32 +182,44 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
         (Array(t1_), Array(t2_)) => unify(t1_, t2_),
         (Var(r1), Var(r2)) if r1.as_ptr() == r2.as_ptr() => Ok(()),
         (Var(r1), _) => {
-            let mut x = r1.borrow_mut();
-            match &*x {
-                Some(t1_) => unify(t1_, t2),
-                None => {
-                    if occur(r1, t2) {
-                        Err(Unify(t1.clone(), t2.clone()))
-                    } else {
-                        *x = Some(t2.clone());
-                        Ok(())
+            let mut fresh = false;
+            let res = {
+                match *r1.borrow() {
+                    Some(ref t1_) => unify(t1_, t2),
+                    None => {
+                        if occur(r1, t2) {
+                            Err(Unify(t1.clone(), t2.clone()))
+                        } else {
+                            fresh = true;
+                            Ok(())
+                        }
                     }
                 }
-            }
+            };
+            if fresh {
+                r1.replace(Some(t2.clone()));
+            };
+            res
         }
         (_, Var(r2)) => {
-            let mut x = r2.borrow_mut();
-            match &*x {
-                Some(t2_) => unify(t1, t2_),
-                None => {
-                    if occur(r2, t1) {
-                        Err(Unify(t1.clone(), t2.clone()))
-                    } else {
-                        *x = Some(t1.clone());
-                        Ok(())
+            let mut fresh = false;
+            let res = {
+                match *r2.borrow() {
+                    Some(ref t2_) => unify(t1, t2_),
+                    None => {
+                        if occur(r2, t1) {
+                            Err(Unify(t1.clone(), t2.clone()))
+                        } else {
+                            fresh = true;
+                            Ok(())
+                        }
                     }
                 }
-            }
+            };
+            if fresh {
+                r2.replace(Some(t1.clone()));
+            };
+            res
         }
         _ => Err(Unify(t1.clone(), t2.clone())),
     }
@@ -274,13 +289,19 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> Result<Type, Error> {
             match ent {
                 Some(t) => Ok(t.clone()),
                 None => {
-                    // FIXME: lookup in `extenv`
-                    // below for missing in `extenv`
-                    // FIXME: log
-                    // Format.eprintf "free variable %s assumed as external@." x;
-                    let t = ty::gentyp();
-                    // FIXME: add to extenv
-                    Ok(t)
+                    EXTENV.with(|extenv_| {
+                        let mut extenv = extenv_.borrow_mut();
+                        match extenv.get(x) {
+                            Some(t) => Ok(t.clone()),
+                            None => {
+                                // FIXME: log
+                                // Format.eprintf "free variable %s assumed as external@." x;
+                                let t = ty::gentyp();
+                                extenv.insert(x.clone(), t.clone());
+                                Ok(t)
+                            }
+                        }
+                    })
                 }
             }
         }
@@ -358,11 +379,21 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> Result<Type, Error> {
 #[allow(dead_code)] // FIXME:
 pub fn f(e: &Syntax) -> Result<Syntax, Box<dyn std::error::Error>> {
     // FIXME: initialise extenv
+    EXTENV.with(|extenv_| {
+        let mut extenv = extenv_.borrow_mut();
+        extenv.clear();
+    });
 
     let env = im::HashMap::new();
     match unify(&Type::Unit, &g(&env, e)?) {
         Ok(_) => {
-            // FIXME: deref_typ each type in extmap
+            // deref_typ each type in extenv
+            EXTENV.with(|extenv_| {
+                let mut extenv = extenv_.borrow_mut();
+                for (_, t) in extenv.iter_mut() {
+                    *t = deref_typ(t);
+                }
+            });
             Ok(deref_term(e))
         }
         Err(_err) => Err(Box::<dyn std::error::Error>::from(
