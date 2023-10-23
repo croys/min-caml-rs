@@ -8,6 +8,14 @@ license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[unstable]
+# Note: despite the compiler error suggesting it,
+# "box_xyntax" has been removed. "box_patterns" are unstable
+# and apparently due to be replaced by deref patterns.
+#
+#allow-features = [ "box_syntax", "box_patterns" ]
+#allow-features = [ "box_patterns" ]
+
 [dependencies]
 peg = "0.8"
 im = "15"

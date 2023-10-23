@@ -8,6 +8,9 @@
 //
 //
 //
+
+//#![feature(box_patterns)]
+
 mod id;
 mod k_normal;
 mod lexer;

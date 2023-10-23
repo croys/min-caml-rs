@@ -4,12 +4,12 @@ use crate::ty::Type;
 
 // 変数の名前 - variable name
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
-pub struct T(String);
+pub struct T(pub String);
 
 // トップレベル関数やグローバル配列のラベル
 //   - labels for top level function and global arrays
 #[derive(Clone, PartialEq, Debug, Hash, Eq)]
-pub struct L(String);
+pub struct L(pub String);
 
 static mut COUNTER: u32 = 0;
 
