@@ -87,18 +87,29 @@ pub fn fv(e: T) -> im::hashset::HashSet<id::T> {
 
 // letを挿入する補助関数
 //
-pub fn insert_let((e, t): (T, Type), k: &dyn Fn(id::T) -> (T, Type)) -> T {
-    unimplemented!()
+pub fn insert_let(
+    (e, t): (T, Type),
+    k: &dyn Fn(id::T) -> (T, Type),
+) -> (T, Type) {
+    use T::*;
+    match e {
+        Var(x) => k(x),
+        _ => {
+            let x = id::gentmp(&t);
+            let (e_, t_) = k(x.clone());
+            (Let((x, t), Box::new(e), Box::new(e_)), t_)
+        }
+    }
 }
 
 // K正規化ルーチン本体
 //
 // FIXME: should probably use a type alias/newtype for env
 pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> (T, Type) {
-    unimplemented!()
+    todo!()
 }
 
 pub fn f(e: &Syntax) -> T {
     // FIXME: create empty env & call g
-    unimplemented!()
+    todo!()
 }
