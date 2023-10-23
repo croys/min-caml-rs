@@ -1,3 +1,4 @@
+use crate::id;
 use crate::syntax::{Fundef, Syntax};
 use crate::ty;
 use crate::ty::Type;
@@ -78,7 +79,7 @@ pub fn deref_typ(ty: &Type) -> Type {
     }
 }
 
-pub fn deref_id_typ((x, t): &(String, Type)) -> (String, Type) {
+pub fn deref_id_typ((x, t): &(id::T, Type)) -> (id::T, Type) {
     (x.clone(), deref_typ(t))
 }
 
@@ -209,7 +210,7 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
     }
 }
 
-pub fn g(env: &im::HashMap<String, Type>, e: &Syntax) -> Result<Type, Error> {
+pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> Result<Type, Error> {
     // FIXME: ^^^ probably want HashMap<&str, &Type>
     use Syntax::*;
     // FIXME: whole block needs to have result captured

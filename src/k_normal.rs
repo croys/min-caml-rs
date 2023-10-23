@@ -207,15 +207,14 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
         ),
         S::Let((x, t), e1, e2) => {
             let (e1_, t1) = g(env, e1);
-            let env_ = env.update(id::T(x.clone()), t.clone());
+            let env_ = env.update(x.clone(), t.clone());
             let (e2_, t2) = g(&env_, e2);
-            (Let((id::T(x.clone()), t.clone()), b(e1_), b(e2_)), t2)
+            (Let((x.clone(), t.clone()), b(e1_), b(e2_)), t2)
         }
         // FIXME: syntax should use id::T
-        S::Var(x) if env.contains_key(&id::T(x.clone())) => (
-            Var(id::T(x.clone())),
-            env.get(&id::T(x.clone())).unwrap().clone(),
-        ),
+        S::Var(x) if env.contains_key(&x.clone()) => {
+            (Var(x.clone()), env.get(&x.clone()).unwrap().clone())
+        }
         // 外部配列の参照
         // - external array reference
         S::Var(x) => {
@@ -231,17 +230,17 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             e2,
         ) => {
             // FIXME: Syntax should use id::T
-            let mut env_ = env.update(id::T(x.clone()), t.clone());
+            let mut env_ = env.update(x.clone(), t.clone());
             let (e2_, t2) = g(&env_, e2);
-            env_.extend(yts.iter().map(|(y, t)| (id::T(y.clone()), t.clone())));
+            env_.extend(yts.iter().map(|(y, t)| (y.clone(), t.clone())));
             let (e1_, t1) = g(&env_, e1);
             (
                 LetRec(
                     FunDef {
-                        name: (id::T(x.clone()), t.clone()),
+                        name: (x.clone(), t.clone()),
                         args: yts
                             .iter()
-                            .map(|(y, t)| (id::T(y.clone()), t.clone()))
+                            .map(|(y, t)| (y.clone(), t.clone()))
                             .collect(),
                         body: b(e1_),
                     },

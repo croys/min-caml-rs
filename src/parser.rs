@@ -4,14 +4,15 @@
 // Fairly direct translation of tokenizer from parser.mly
 //
 
+use crate::id;
 use crate::lexer::Token;
 use crate::syntax::{Fundef, Syntax};
 use crate::ty;
 use crate::ty::Type;
 use Token::*;
 
-fn addtyp(n: &str) -> (String, Type) {
-    (String::from(n), ty::gentyp())
+fn addtyp(n: &str) -> (id::T, Type) {
+    (id::T(String::from(n)), ty::gentyp())
 }
 
 fn b(x: Syntax) -> Box<Syntax> {
@@ -33,7 +34,7 @@ peg::parser! {
             [Int(x)]            { Syntax::Int(x) }
             [Float(x)]          { Syntax::Float(x) }
             // FIXME: create id
-            [Ident(n)]          { Syntax::Var(String::from(n)) }
+            [Ident(n)]          { Syntax::Var(id::T(String::from(n))) }
             [LParen] e0:(exp(st)) [Comma] es:(exp(st) ++ [Comma]) [RParen]
                 {
                     let mut vec = Vec::new();
@@ -58,8 +59,7 @@ peg::parser! {
         pub rule exp(st : ()) -> Syntax = precedence!{
             x:(@) [Semicolon] y:@
             {
-                // FIXME: fresh tmp id
-                Syntax::Let((String::from(""), Type::Unit), b(x), b(y))
+                Syntax::Let((id::gentmp(&Type::Unit), Type::Unit), b(x), b(y))
             }
             --
             // FIXME: should be high precedence

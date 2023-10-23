@@ -1,3 +1,4 @@
+use crate::id;
 use crate::lexer;
 use crate::parser;
 use crate::syntax::Syntax;
@@ -90,8 +91,8 @@ fn test_prec() {
         // FIXME: helper fns for syntax construction
         use Syntax::*;
         assert_eq!(syn, Add(
-                Box::new(App(Box::new(Var(String::from("f"))),
-                    vec![Var(String::from("x"))])),
+                Box::new(App(Box::new(Var(id::T(String::from("f")))),
+                    vec![Var(id::T(String::from("x")))])),
                 Box::new(Int(1))));
     }
 

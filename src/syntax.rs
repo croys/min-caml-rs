@@ -1,9 +1,10 @@
+use crate::id;
 use crate::ty::Type;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Fundef {
-    pub name: (String /* Id */, Type),
-    pub args: Vec<(String /* Id */, Type)>,
+    pub name: (id::T, Type),
+    pub args: Vec<(id::T, Type)>,
     pub body: Box<Syntax>,
 }
 
@@ -29,12 +30,12 @@ pub enum Syntax {
     Ge(Box<Syntax>, Box<Syntax>), // note: addition
     // FIXME: Ne (not equal)?
     If(Box<Syntax>, Box<Syntax>, Box<Syntax>),
-    Let((String /* Id */, Type), Box<Syntax>, Box<Syntax>),
-    Var(String /* Id */),
+    Let((id::T, Type), Box<Syntax>, Box<Syntax>),
+    Var(id::T),
     LetRec(Fundef, Box<Syntax>),
     App(Box<Syntax>, Vec<Syntax>),
     Tuple(Vec<Syntax>),
-    LetTuple(Vec<(String /* Id */, Type)>, Box<Syntax>, Box<Syntax>),
+    LetTuple(Vec<(id::T, Type)>, Box<Syntax>, Box<Syntax>),
     Array(Box<Syntax>, Box<Syntax>),
     Get(Box<Syntax>, Box<Syntax>),
     Put(Box<Syntax>, Box<Syntax>, Box<Syntax>),
