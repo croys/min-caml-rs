@@ -47,6 +47,9 @@ possible.
 * Closure Conversion
 * Code generation
 * System library
+* Reference interpreter
+* REPL
+* Command line
 
 <!--
 ## Installation
