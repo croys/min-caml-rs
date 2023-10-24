@@ -36,20 +36,21 @@ possible.
 
 * Lexer - done
 * Parser - done
-* Type inference/checking - mostly done
-* K-Normalization (conversion to SSA form) - in progress
+* Type inference/checking - done
+* K-Normalization (conversion to SSA form) - mostly done
 * α-Conversion
-* β-Reduction
-* let-Reduction
-* inline expansion
-* constant folding
-* unnecessary definition elimination
+* Optimizations
+  * β-Reduction
+  * let-Reduction
+  * inline expansion
+  * constant folding
+  * unnecessary definition elimination
 * Closure Conversion
 * Code generation
 * System library
 * Reference interpreter
 * REPL
-* Command line
+* Command line - in progress
 
 <!--
 ## Installation
