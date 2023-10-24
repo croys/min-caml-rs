@@ -13,10 +13,10 @@ pub struct L(pub String);
 
 static mut COUNTER: u32 = 0;
 
-pub fn genid(s: &str) -> T {
+pub fn genid(s: &T) -> T {
     unsafe {
         COUNTER += 1;
-        T(format!("{}.{}", s, COUNTER))
+        T(format!("{}.{}", s.0, COUNTER))
     }
 }
 

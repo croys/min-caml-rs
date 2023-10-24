@@ -11,6 +11,7 @@
 
 //#![feature(box_patterns)]
 
+mod alpha;
 mod id;
 mod k_normal;
 mod lexer;

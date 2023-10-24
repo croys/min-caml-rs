@@ -38,7 +38,7 @@ possible.
 * Parser - done
 * Type inference/checking - done
 * K-Normalization (conversion to SSA form) - mostly done
-* α-Conversion
+* α-Conversion - in progress
 * Optimizations
   * β-Reduction
   * let-Reduction
