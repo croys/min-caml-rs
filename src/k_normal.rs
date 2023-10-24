@@ -250,93 +250,86 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             )
         }
         S::App(e1, e2s) => {
+            let normalize_app = |f: &id::T,
+                                 app: &dyn Fn(id::T, Vec<id::T>) -> T|
+             -> T {
+                // normalise function applications
+                //
+                // Note: the Caml code is building an expression:
+                //
+                // let x0 = e0 in
+                //    let x1 = e1 in
+                //      ...
+                //        let xN = eN in
+                //          ExtFunApp f [x0, x1, ... xN]
+                //
+                // where no `let` is necessary if the expression is a
+                // variable.
+                //
+                // Rust's lack of recursive closures and partial
+                // application makes it difficult to directly translate
+                // the Caml without hacks or lambda lifting and lots
+                // of intrusive messy mechanism. So, we just do
+                // a simple imperative equivalent.
+
+                // normalize arguments
+                let nes = e2s.iter().map(|e2| {
+                    let (e2_, e2_t) = g(env, e2);
+                    match e2_ {
+                        Var(ref x) => (x.clone(), e2_, e2_t),
+                        _ => {
+                            let x = id::gentmp(&e2_t);
+                            (x, e2_, e2_t)
+                        }
+                    }
+                });
+
+                // base expression is external call
+                // using all ids
+                let re0 =
+                    app(f.clone(), nes.clone().map(|(x, _, _)| x).collect());
+
+                // iterate right to left
+                // to build necessary let expressions
+                let mut res = re0;
+                for (id, e, t) in nes.rev() {
+                    if let Var(x) = e {
+                        // no need for let
+                    } else {
+                        // insert let
+                        res = Let((id, t), b(e), b(res));
+                    }
+                }
+                res
+            };
+
             match **e1 {
                 // 外部関数の呼び出し
                 // - external variable invocation
                 S::Var(ref f) if !env.contains_key(f) => {
-                    // Note:
-                    // The Caml code is building an expression:
-                    //
-                    // let x0 = e0 in
-                    //    let x1 = e1 in
-                    //      ...
-                    //        let xN = eN in
-                    //          ExtFunApp f x0, x1, ... xN
-                    //
-                    // where no `let` is necessary if the expression is a
-                    // variable
-                    //
-                    // Rust's lack of recursive closures and partial
-                    // application makes it difficult to directly translate
-                    // the Caml without hacks or lambda lifting and lots
-                    // of intrusive messy mechanism. So, lets just do
-                    // a simple imperative equivalent.
-                    //
-                    // gather ids and types: (g env eX)
-                    // generate ids upfront, then fold over expressions
-                    // - need tag to indicate whether let is necessary
-                    //
-                    // [(id, needs_let)]
-                    //
-                    // just use (id, normalised_exp, type)
-                    // can check if normalised_exp is Var, then: no let needed
-
-                    // Ugh, Rust doesn't have recursive closures
-                    // Ugh, no partial application either...
-                    // write the equivalent as a loop, don't use
-                    // insert_let
-                    // fn bind(f : &id::T, xs : &Vec<Syntax>, ys : &Vec<Syntax> ) -> T {
-                    //     todo!()
-                    // }
-
                     typing::EXTENV.with(|extenv_| {
                         let extenv = extenv_.borrow();
                         match extenv.get(f) {
                             Some(Type::Fun(_, t)) => {
-                                // FIXME: make this a local convenience fn
-
-                                // normalise expressions and generate ids
-                                // as necessary
-                                let nes = e2s.iter().map(|e2| {
-                                    let (e2_, e2_t) = g(env, e2);
-                                    match e2_ {
-                                        Var(ref x) => (x.clone(), e2_, e2_t),
-                                        _ => {
-                                            let x = id::gentmp(&e2_t);
-                                            (x, e2_, e2_t)
-                                        }
-                                    }
-                                });
-
-                                // base expression is external call
-                                // using all ids
-                                let re0 = ExtFunApp(
-                                    f.clone(),
-                                    nes.clone().map(|(x, _, _)| x).collect(),
-                                );
-
-                                // iterate right to left
-                                // to build necessary let expressions
-                                let mut res = re0;
-                                for (id, e, t) in nes.rev() {
-                                    if let Var(x) = e {
-                                        // no need for let
-                                    } else {
-                                        // insert let
-                                        res = Let((id, t), b(e), b(res));
-                                    }
-                                }
-                                (res, *t.clone())
+                                (normalize_app(f, &ExtFunApp), *t.clone())
                             }
-                            // Caml code does `assert false`
-                            // FIXME: use a Result
+                            // FIXME: use a Result? Caml does `assert false`
                             _ => unreachable!(),
                         }
                     })
                 }
                 _ => {
-                    // as above, but we have a function expr
-                    todo!()
+                    // as above, but we also normalise the function expression
+                    let g_e1 = g(env, e1);
+                    match g_e1 {
+                        (_, Type::Fun(_, ref t)) => {
+                            insert_let(g_e1.clone(), &|f| {
+                                (normalize_app(&f, &App), *t.clone())
+                            })
+                        }
+                        // FIXME: use a Result? - Caml does `assert false`
+                        _ => unreachable!(),
+                    }
                 }
             }
         }
