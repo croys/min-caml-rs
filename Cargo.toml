@@ -19,3 +19,4 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 peg = "0.8"
 im = "15"
+clap = { version = "4.4", features = ["derive"] }
