@@ -291,6 +291,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
 
                 // iterate right to left
                 // to build necessary let expressions
+                //
                 let mut res = re0;
                 for (id, e, t) in nes.rev() {
                     if let Var(x) = e {
@@ -314,7 +315,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
                                 (normalize_app(f, &ExtFunApp), *t.clone())
                             }
                             // FIXME: use a Result? Caml does `assert false`
-                            _ => unreachable!(),
+                            _ => panic!("ExtFunApp: Expected a function!"),
                         }
                     })
                 }
@@ -328,16 +329,84 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
                             })
                         }
                         // FIXME: use a Result? - Caml does `assert false`
-                        _ => unreachable!(),
+                        _ => panic!("App: Expected a function!"),
                     }
                 }
             }
         }
-        _ => todo!(),
+        S::Tuple(es) => {
+            // FIXME: merge with normalize_app?
+
+            // normalize components
+            let nes = es.iter().map(|e| {
+                let (e_, e_t) = g(env, e);
+                match e_ {
+                    Var(ref x) => (x.clone(), e_, e_t),
+                    _ => {
+                        let x = id::gentmp(&e_t);
+                        (x, e_, e_t)
+                    }
+                }
+            });
+
+            // base expression is tuple construction
+            let res0 = Tuple(nes.clone().map(|(x, _, _)| x).collect());
+            let res_t = Type::Tuple(nes.clone().map(|(_, _, t)| t).collect());
+
+            let mut res = res0;
+            for (id, e, t) in nes.rev() {
+                if let Var(x) = e {
+                    // no need for let
+                } else {
+                    // insert let
+                    res = Let((id, t), b(e), b(res));
+                }
+            }
+            (res, res_t)
+        }
+        S::LetTuple(xts, e1, e2) => insert_let(g(env, e1), &|y| {
+            let mut env2 = env.clone();
+            env2.extend(xts.clone());
+            let (e2_, t2) = g(&env2, e2);
+            (LetTuple(xts.clone(), y, b(e2_)), t2)
+        }),
+        S::Array(e1, e2) => insert_let(g(env, e1), &|x| {
+            let g_e2 = g(env, e2);
+            let t2 = g_e2.1.clone();
+            insert_let(g_e2, &|y| {
+                let l = match t2 {
+                    Type::Float => id::T(String::from("create_float_array")),
+                    _ => id::T(String::from("create_array")),
+                };
+                (
+                    ExtFunApp(l, vec![x.clone(), y.clone()]),
+                    Type::Array(Box::new(t2.clone())),
+                )
+            })
+        }),
+        S::Get(e1, e2) => {
+            let g_e1 = g(env, e1);
+            match g_e1 {
+                (_, Type::Array(ref t)) => insert_let(g_e1.clone(), &|x| {
+                    insert_let(g(env, e2), &|y| (Get(x.clone(), y), *t.clone()))
+                }),
+                _ => panic!("Expected array"),
+            }
+        }
+        S::Put(e1, e2, e3) =>
+        // FIXME: no check for array?
+        {
+            insert_let(g(env, e1), &|ref x| {
+                insert_let(g(env, e2), &|ref y| {
+                    insert_let(g(env, e3), &|ref z| {
+                        (Put(x.clone(), y.clone(), z.clone()), Type::Unit)
+                    })
+                })
+            })
+        }
     }
 }
 
 pub fn f(e: &Syntax) -> T {
-    // FIXME: create empty env & call g
-    todo!()
+    g(&im::HashMap::new(), e).0
 }
