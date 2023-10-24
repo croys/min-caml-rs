@@ -1,4 +1,5 @@
-#![allow(dead_code, unused_variables)]
+//#![allow(dead_code, unused_variables)]
+#![allow(dead_code)]
 
 use crate::id;
 use crate::syntax;
@@ -24,6 +25,9 @@ pub enum T {
     FDiv(id::T, id::T),
     IfEq(id::T, id::T, Box<T>, Box<T>), // 比較 + 分岐 - compare and branch
     IfLE(id::T, id::T, Box<T>, Box<T>), // 比較 + 分岐 - compare and branch
+    IfLt(id::T, id::T, Box<T>, Box<T>), // note: addition in min-caml-rs
+    IfGt(id::T, id::T, Box<T>, Box<T>), // note: addition in min-caml-rs
+    IfGe(id::T, id::T, Box<T>, Box<T>), // note: addition in min-caml-rs
     Let((id::T, Type), Box<T>, Box<T>),
     Var(id::T),
     LetRec(FunDef, Box<T>),
@@ -60,14 +64,16 @@ pub fn fv(e: T) -> im::hashset::HashSet<id::T> {
         | FMul(x, y)
         | FDiv(x, y)
         | Get(x, y) => S::from_iter([x, y]),
-        IfEq(x, y, e1, e2) | IfLE(x, y, e1, e2) => {
-            S::from_iter([x, y]) + fv(*e1) + fv(*e2)
-        }
-        Let((x, t), e1, e2) => fv(*e1) + fv(*e2).without(&x),
+        IfEq(x, y, e1, e2)
+        | IfLE(x, y, e1, e2)
+        | IfLt(x, y, e1, e2)
+        | IfGt(x, y, e1, e2)
+        | IfGe(x, y, e1, e2) => S::from_iter([x, y]) + fv(*e1) + fv(*e2),
+        Let((x, _t), e1, e2) => fv(*e1) + fv(*e2).without(&x),
         Var(x) => S::unit(x),
         LetRec(
             FunDef {
-                name: (x, t),
+                name: (x, _t),
                 args: yts,
                 body: e1,
             },
@@ -179,7 +185,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             insert_let(g(env, e1), &|x| {
                 insert_let(g(env, e2), &|y| {
                     let (e3_, t3) = g(env, e3);
-                    let (e4_, t4) = g(env, e4);
+                    let (e4_, _t4) = g(env, e4);
                     (IfEq(x.clone(), y, b(e3_.clone()), b(e4_.clone())), t3)
                 })
             })
@@ -191,11 +197,48 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             insert_let(g(env, e1), &|x| {
                 insert_let(g(env, e2), &|y| {
                     let (e3_, t3) = g(env, e3);
-                    let (e4_, t4) = g(env, e4);
+                    let (e4_, _t4) = g(env, e4);
                     (IfLE(x.clone(), y, b(e3_.clone()), b(e4_.clone())), t3)
                 })
             })
         }
+        S::If(e0, e3, e4) if matches!(**e0, S::Lt(_, _)) => {
+            let S::Lt(ref e1, ref e2) = **e0 else {
+                unreachable!()
+            };
+            insert_let(g(env, e1), &|x| {
+                insert_let(g(env, e2), &|y| {
+                    let (e3_, t3) = g(env, e3);
+                    let (e4_, _t4) = g(env, e4);
+                    (IfLt(x.clone(), y, b(e3_.clone()), b(e4_.clone())), t3)
+                })
+            })
+        }
+        S::If(e0, e3, e4) if matches!(**e0, S::Gt(_, _)) => {
+            let S::Gt(ref e1, ref e2) = **e0 else {
+                unreachable!()
+            };
+            insert_let(g(env, e1), &|x| {
+                insert_let(g(env, e2), &|y| {
+                    let (e3_, t3) = g(env, e3);
+                    let (e4_, _t4) = g(env, e4);
+                    (IfGt(x.clone(), y, b(e3_.clone()), b(e4_.clone())), t3)
+                })
+            })
+        }
+        S::If(e0, e3, e4) if matches!(**e0, S::Ge(_, _)) => {
+            let S::Ge(ref e1, ref e2) = **e0 else {
+                unreachable!()
+            };
+            insert_let(g(env, e1), &|x| {
+                insert_let(g(env, e2), &|y| {
+                    let (e3_, t3) = g(env, e3);
+                    let (e4_, _t4) = g(env, e4);
+                    (IfGe(x.clone(), y, b(e3_.clone()), b(e4_.clone())), t3)
+                })
+            })
+        }
+        // FIXME: Ne
         // 比較のない分岐を変換
         // - change branches without comparison
         S::If(e1, e2, e3) => g(
@@ -207,7 +250,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             ),
         ),
         S::Let((x, t), e1, e2) => {
-            let (e1_, t1) = g(env, e1);
+            let (e1_, _t1) = g(env, e1);
             let env_ = env.update(x.clone(), t.clone());
             let (e2_, t2) = g(&env_, e2);
             (Let((x.clone(), t.clone()), b(e1_), b(e2_)), t2)
@@ -218,10 +261,16 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
         }
         // 外部配列の参照
         // - external array reference
-        S::Var(x) => {
-            // FIXME: lookup x in typing::extenv
-            unimplemented!()
-        }
+        S::Var(x) => typing::EXTENV.with(|extenv_| {
+            let extenv = extenv_.borrow();
+            match extenv.get(x) {
+                Some(t @ Type::Array(_)) => (ExtArray(x.clone()), t.clone()),
+                _ => panic!(
+                    "external variable {:?} does not have an aray type",
+                    x
+                ),
+            }
+        }),
         S::LetRec(
             syntax::Fundef {
                 name: (x, t),
@@ -233,7 +282,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             let mut env_ = env.update(x.clone(), t.clone());
             let (e2_, t2) = g(&env_, e2);
             env_.extend(yts.iter().map(|(y, t)| (y.clone(), t.clone())));
-            let (e1_, t1) = g(&env_, e1);
+            let (e1_, _t1) = g(&env_, e1);
             (
                 LetRec(
                     FunDef {
@@ -294,7 +343,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
                 //
                 let mut res = re0;
                 for (id, e, t) in nes.rev() {
-                    if let Var(x) = e {
+                    if let Var(_x) = e {
                         // no need for let
                     } else {
                         // insert let
@@ -355,7 +404,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
 
             let mut res = res0;
             for (id, e, t) in nes.rev() {
-                if let Var(x) = e {
+                if let Var(_x) = e {
                     // no need for let
                 } else {
                     // insert let

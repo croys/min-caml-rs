@@ -12,7 +12,7 @@ fn test_f() {
         let path = entry.unwrap().path();
 
         // FIXME: WIP - ignore these tests for now due to bugs in parser
-        if true {
+        if false {
             let ignore_tests = [
                 "even-odd.ml",
                 "cls-bug2.ml",
