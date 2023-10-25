@@ -82,7 +82,11 @@ fn main() {
         println!("{:?}", ast);
         return;
     }
-    let typed_ast = typing::f(&ast).expect("Type inference failed");
+    let typed_res = typing::f(&ast);
+    if let Err(ref e) = typed_res {
+        panic!("Type inference failed:\n{}", e);
+    }
+    let typed_ast = typed_res.unwrap();
     if args.stage == Stage::Type {
         println!("{:?}", typed_ast);
         // FIXME: dump extenv
