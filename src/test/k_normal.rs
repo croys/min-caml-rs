@@ -1,9 +1,13 @@
+#![allow(dead_code)]
+
 use crate::k_normal;
 use crate::lexer;
 use crate::parser;
 use crate::typing;
 
 use std::fs;
+
+type KNormal = k_normal::T;
 
 // FIXME: parameterised tests
 #[test]
@@ -50,5 +54,19 @@ fn test_f() {
             let norm = k_normal::f(&syn_ty);
             println!("{:?}", norm);
         }
+    }
+}
+
+#[test]
+fn test_pp() {
+    fn b(e: KNormal) -> Box<KNormal> {
+        Box::new(e)
+    }
+
+    use k_normal::T::*;
+    {
+        let mut output = String::new();
+        Unit.pp(&mut output, 0).expect("failed to write");
+        assert_eq!("Unit", output);
     }
 }

@@ -7,7 +7,7 @@ use crate::syntax::Syntax;
 use crate::ty::Type;
 use crate::typing;
 
-//use im;
+use std::fmt;
 
 // K正規化後の式 - k-Normalized expression type
 #[derive(Debug, PartialEq, Clone)]
@@ -458,4 +458,162 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
 
 pub fn f(e: &Syntax) -> T {
     g(&im::HashMap::new(), e).0
+}
+
+// Pretty printing
+
+impl T {
+    pub fn pp(
+        &self,
+        out: &mut dyn std::fmt::Write,
+        ind: u32,
+    ) -> Result<(), std::fmt::Error> {
+        // FIXME: refactor these
+        fn spcs(
+            out: &mut dyn std::fmt::Write,
+            n: u32,
+        ) -> Result<(), std::fmt::Error> {
+            for _ in 0..n {
+                fmt::write(out, format_args!(" "))?;
+            }
+            Ok(())
+        }
+
+        fn nl(out: &mut dyn std::fmt::Write) -> Result<(), std::fmt::Error> {
+            fmt::write(out, format_args!("\n"))
+        }
+
+        use T::*;
+        spcs(out, ind)?;
+
+        match *self {
+            Unit => fmt::write(out, format_args!("Unit")),
+            Int(ref i) => fmt::write(out, format_args!("Int({})", i)),
+            Float(ref d) => fmt::write(out, format_args!("Float({})", d)),
+
+            // Unary operators
+            Neg(ref x) | FNeg(ref x) | Var(ref x) | ExtArray(ref x) => {
+                let c = match *self {
+                    Neg(_) => "Neg",
+                    FNeg(_) => "FNeg",
+                    Var(_) => "Var",
+                    ExtArray(_) => "ExtArray",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {}\n", c, x.0))
+            }
+
+            // Binary operators
+            Add(ref x, ref y)
+            | Sub(ref x, ref y)
+            | FAdd(ref x, ref y)
+            | FSub(ref x, ref y)
+            | FMul(ref x, ref y)
+            | FDiv(ref x, ref y)
+            | Get(ref x, ref y) => {
+                let c = match *self {
+                    Add(_, _) => "Add",
+                    Sub(_, _) => "Sub",
+                    FAdd(_, _) => "FAdd",
+                    FSub(_, _) => "FSub",
+                    FMul(_, _) => "FMul",
+                    FDiv(_, _) => "FDiv",
+                    Get(_, _) => "Get",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {} {}", c, x.0, y.0))
+            }
+            // Branches
+            IfEq(ref x, ref y, ref e1, ref e2)
+            | IfLE(ref x, ref y, ref e1, ref e2)
+            | IfLt(ref x, ref y, ref e1, ref e2)
+            | IfGt(ref x, ref y, ref e1, ref e2)
+            | IfGe(ref x, ref y, ref e1, ref e2) => {
+                let c = match *self {
+                    IfEq(_, _, _, _) => "IfEq",
+                    IfLE(_, _, _, _) => "IfLE",
+                    IfLt(_, _, _, _) => "IfLt",
+                    IfGt(_, _, _, _) => "IfGt",
+                    IfGe(_, _, _, _) => "IfGe",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {} {}\n", c, x.0, y.0))?;
+                e1.pp(out, ind + 1)?;
+                nl(out)?;
+                e2.pp(out, ind + 1)
+            }
+            Let((ref x, ref t), ref e1, ref e2) => {
+                fmt::write(out, format_args!("Let {} : {:?} =\n", x.0, t))?;
+                e1.pp(out, ind + 1)?;
+                nl(out)?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
+                e2.pp(out, ind + 1)
+            }
+            LetRec(
+                FunDef {
+                    name: (ref x, ref t),
+                    args: ref yts,
+                    body: ref e1,
+                },
+                ref e2,
+            ) => {
+                fmt::write(out, format_args!("LetRec {} : {:?} =\n", x.0, t))?;
+                spcs(out, ind + 2)?;
+                fmt::write(out, format_args!("\\"))?;
+                let mut first = true;
+                for (ref y, ref t) in yts {
+                    if first {
+                        first = false;
+                    } else {
+                        fmt::write(out, format_args!(", "))?;
+                    }
+                    fmt::write(out, format_args!("({} : {:?})", y.0, t))?;
+                }
+                fmt::write(out, format_args!(" ->\n"))?;
+                e1.pp(out, ind + 1)?;
+                fmt::write(out, format_args!("  in\n"))?;
+                e2.pp(out, ind + 1)
+            }
+            App(ref x, ref ys) | ExtFunApp(ref x, ref ys) => {
+                let c = match *self {
+                    App(_, _) => "App",
+                    ExtFunApp(_, _) => "ExtFunApp",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {} (", c, x.0))?;
+                for y in ys {
+                    fmt::write(out, format_args!(" {}", y.0))?;
+                }
+                fmt::write(out, format_args!(" )"))
+            }
+            Tuple(ref xs) => {
+                fmt::write(out, format_args!("Tuple ("))?;
+                let mut first = true;
+                for x in xs {
+                    if first {
+                        first = false;
+                    } else {
+                        fmt::write(out, format_args!(", "))?;
+                    }
+                    fmt::write(out, format_args!("{}", x.0))?;
+                }
+                fmt::write(out, format_args!(")"))
+            }
+            LetTuple(ref xts, ref x, ref e) => {
+                fmt::write(out, format_args!("LetTuple (\n"))?;
+                for (ref x, ref t) in xts {
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!("{} : {:?}", x.0, t))?;
+                    nl(out)?;
+                }
+                spcs(out, ind + 1)?;
+                fmt::write(out, format_args!(") = {} in\n", x.0))?;
+                e.pp(out, ind + 2)
+            }
+            Put(ref x, ref y, ref z) => {
+                fmt::write(out, format_args!("Put {} {} {}", x.0, y.0, z.0))
+            }
+        }
+    }
 }

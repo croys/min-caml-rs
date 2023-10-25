@@ -101,6 +101,12 @@ fn main() {
         return;
     }
     let norm_exp = k_normal::f(&typed_ast);
-    // FIXME: dump extenv
-    println!("{:?}", norm_exp);
+    if args.stage == Stage::Normal {
+        println!("{:?}", norm_exp);
+        let mut out = String::new();
+        norm_exp.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
+        // FIXME: dump extenv
+        // return;
+    }
 }
