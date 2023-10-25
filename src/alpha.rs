@@ -17,7 +17,7 @@ fn find(x: &Id, env: &im::HashMap<Id, Id>) -> Id {
 }
 
 // α変換ルーチン本体
-// - alpha-conversion main routine
+// - α-conversion main routine
 fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
     use k_normal::T::*;
 
@@ -58,6 +58,7 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
         }
         Let((ref x, ref t), e1, e2) => {
             // letのα変換
+            // - α-conversion for let
             let x_ = id::genid(x);
             Let(
                 (x_.clone(), t.clone()),
@@ -75,6 +76,7 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
             e2,
         ) => {
             // let recのα変換
+            // - α-conversion for let-rec
             let env = env.update(x.clone(), id::genid(x));
             let mut env_ = env.clone();
             for (y, _t) in yts {
@@ -98,6 +100,7 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
         Tuple(xs) => Tuple(xs.iter().map(|x| find(x, env)).collect()),
         LetTuple(xts, y, e) => {
             // LetTupleのα変換
+            // - α-conversion for LetTuple
             let mut env_ = env.clone();
             for (x, _t) in xts {
                 env_.insert(x.clone(), id::genid(x));
