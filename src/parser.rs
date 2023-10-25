@@ -29,7 +29,6 @@ peg::parser! {
             e0:(@) [Dot] [LParen] e1:exp(st) [RParen] ![LessMinus] {
                 Syntax::Get(b(e0), b(e1))
             }
-            // FIXME: create id
             [Ident(n)]          { Syntax::Var(id::T(String::from(n))) }
             [LParen] e0:(exp(st)) [Comma] es:(exp(st) ++ [Comma]) [RParen]
                 {
@@ -52,17 +51,21 @@ peg::parser! {
                 { Syntax::If(b(x), b(y), b(z)) }
             [Let] [Rec] [Ident(n)] formal_args:[Ident(_)]+ [Equal] e0:exp(st)
                 [In] e1:exp(st) {
-                    Syntax::LetRec(Fundef{
+                    Syntax::LetRec(
+                        Fundef {
                             name:   addtyp(n),
                             args:   formal_args.into_iter().map(|tok| {
-                                    if let Ident(x) = tok {
-                                        addtyp(x)
-                                    } else {
-                                        unreachable!()
+                                        if let Ident(x) = tok {
+                                            addtyp(x)
+                                        } else {
+                                            unreachable!()
+                                        }
                                     }
-                                }).collect(),
-                            body : b(e0) },
-                        b(e1))
+                                    ).collect(),
+                            body : b(e0),
+                        },
+                        b(e1),
+                    )
                 }
             [Let] [Ident(n)] [Equal] e0:(exp(st)) [In] e1:exp(st)
                 // note: below is how to add state
@@ -72,15 +75,18 @@ peg::parser! {
             [Let] [LParen] ids:([Ident(_)] **<2,> [Comma]) [RParen]
                 [Equal] e0:exp(st) [In] e1:exp(st)
             {
-                Syntax::LetTuple(ids.into_iter().map(|tok| {
-                            // FIXME: Id, fresh tyvar
+                Syntax::LetTuple(
+                    ids.into_iter().map(|tok| {
                             if let Ident(x) = tok {
                                 addtyp(x)
                             } else {
                                 unreachable!()
                             }
-                        }).collect(),
-                    b(e0), b(e1))
+                        }
+                    ).collect(),
+                    b(e0),
+                    b(e1),
+                )
             }
             --
             e1:simple_exp(st) [Dot] [LParen] e2:exp(st) [RParen]
