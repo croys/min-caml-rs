@@ -80,6 +80,10 @@ fn main() {
     let ast = parser::parser::exp(&lexemes, ()).expect("Parsing failed");
     if args.stage == Stage::Parse {
         println!("{:?}", ast);
+        // FIXME: deref
+        let mut out = String::new();
+        ast.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
         return;
     }
     let typed_res = typing::f(&ast);
@@ -89,6 +93,10 @@ fn main() {
     let typed_ast = typed_res.unwrap();
     if args.stage == Stage::Type {
         println!("{:?}", typed_ast);
+        // FIXME: deref
+        let mut out = String::new();
+        ast.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
         // FIXME: dump extenv
         return;
     }
