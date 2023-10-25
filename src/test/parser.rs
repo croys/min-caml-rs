@@ -194,12 +194,14 @@ fn test_assign() {
 #[test]
 fn test_assign_2() {
     let code = r#"
-        let a = Array.make 2 2 in
+        let a = Array.make 2 (Array.make 0 0) in
+        a.(0) <- Array.make 2 0;
+        a.(1) <- Array.make 2 0;
         a.(0).(0) <- 0;
         a.(0).(1) <- 1;
         a.(1).(0) <- 2;
         a.(1).(1) <- 3
-    "#;
+        "#;
 
     let tokens = lexer::parser::main(code).unwrap();
     println!("{:?}", tokens);
@@ -221,6 +223,54 @@ fn test_assign_3() {
     let syn = parser::parser::exp(&tokens, ()).unwrap();
     println!("{:?}", syn);
 }
+
+
+#[test]
+fn test_assign_4() {
+    // Invalid types, but valid parse
+    let code = r#"
+        (1).(j) <- 10
+    "#;
+
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn_res = parser::parser::exp(&tokens, ());
+    println!("{:?}", syn_res);
+    assert!(syn_res.is_ok());
+}
+
+
+#[test]
+fn test_assign_5() {
+    // Invalid parse - can only assign to array index
+    let code = r#"
+        1 <- c
+    "#;
+
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn_res = parser::parser::exp(&tokens, ());
+    println!("{:?}", syn_res);
+    assert!(syn_res.is_err());
+}
+
+#[test]
+fn test_assign_6() {
+    // Invalid parse - 1. is a float
+    let code = r#"
+        1.(j) <- c
+    "#;
+
+    let tokens = lexer::parser::main(code).unwrap();
+    println!("{:?}", tokens);
+
+    let syn_res = parser::parser::exp(&tokens, ());
+    println!("{:?}", syn_res);
+    assert!(syn_res.is_err());
+}
+
 
 
 #[test]

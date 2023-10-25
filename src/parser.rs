@@ -19,20 +19,16 @@ fn b(x: Syntax) -> Box<Syntax> {
     Box::new(x)
 }
 
-fn dot_accesses_tree(es: Vec<Syntax>) -> Syntax {
-    es[1..]
-        .iter()
-        .fold(es[0].clone(), |x, y| Syntax::Get(b(x), b(y.clone())))
-}
-
 peg::parser! {
     pub grammar parser<'a>() for [Token<'a>] {
 
-        // FIXME: doesn't need to be precedence any more?
         pub rule simple_exp(st:()) -> Syntax = precedence!{
             [Bool(x)]           { Syntax::Bool(x) }
             [Int(x)]            { Syntax::Int(x) }
             [Float(x)]          { Syntax::Float(x) }
+            e0:(@) [Dot] [LParen] e1:exp(st) [RParen] ![LessMinus] {
+                Syntax::Get(b(e0), b(e1))
+            }
             // FIXME: create id
             [Ident(n)]          { Syntax::Var(id::T(String::from(n))) }
             [LParen] e0:(exp(st)) [Comma] es:(exp(st) ++ [Comma]) [RParen]
@@ -46,34 +42,10 @@ peg::parser! {
             [LParen] e:exp(st) [RParen] { e }
         }
 
-        pub rule dot_access(st: ()) -> Syntax =
-            [Dot] [LParen] e:(exp(st)) [RParen] { e }
-
-        pub rule dot_accesses(st: ()) -> Vec<Syntax> =
-            e0:(simple_exp(st)) es:(dot_access(st)+) {
-                let mut v = Vec::new();
-                v.push(e0);
-                v.extend(es);
-                v
-            }
         pub rule exp(st : ()) -> Syntax = precedence!{
             x:(@) [Semicolon] y:@
             {
                 Syntax::Let((id::gentmp(&Type::Unit), Type::Unit), b(x), b(y))
-            }
-            --
-            // FIXME: should be high precedence
-            es:dot_accesses(st) [LessMinus] e2:@ {
-                let mut es_ = es.clone();
-                es_.truncate(es.len()-1);
-                Syntax::Put(
-                    b(dot_accesses_tree(es_)),
-                    b(es[es.len()-1].clone()),
-                    b(e2),
-                )
-            }
-            es:dot_accesses(st) {
-                dot_accesses_tree(es)
             }
             --
             [If] x:(exp(st)) [Then] y:(exp(st)) [Else] z:(exp(st))
@@ -100,7 +72,6 @@ peg::parser! {
             [Let] [LParen] ids:([Ident(_)] **<2,> [Comma]) [RParen]
                 [Equal] e0:exp(st) [In] e1:exp(st)
             {
-                // FIXME: patterns are not recursive?
                 Syntax::LetTuple(ids.into_iter().map(|tok| {
                             // FIXME: Id, fresh tyvar
                             if let Ident(x) = tok {
@@ -110,6 +81,11 @@ peg::parser! {
                             }
                         }).collect(),
                     b(e0), b(e1))
+            }
+            --
+            e1:simple_exp(st) [Dot] [LParen] e2:exp(st) [RParen]
+                    [LessMinus] e3:@ {
+                Syntax::Put(b(e1), b(e2), b(e3))
             }
             --
             x:(@) [Equal] y:@           { Syntax::Eq(b(x), b(y)) }
