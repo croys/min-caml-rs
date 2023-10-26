@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 // FIXME: have full coverage, but still getting clippy warnings. Wut?
 #[allow(dead_code)]
 pub enum Type {
