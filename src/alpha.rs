@@ -122,6 +122,6 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
     }
 }
 
-fn f(e: &KNormal) -> KNormal {
+pub fn f(e: &KNormal) -> KNormal {
     g(&im::HashMap::new(), e)
 }

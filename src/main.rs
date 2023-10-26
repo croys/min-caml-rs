@@ -33,6 +33,9 @@ enum Stage {
     Parse,
     Type,
     Normal,
+    Alpha,
+    Closure,
+    VMCode,
 }
 
 impl fmt::Display for Stage {
@@ -50,6 +53,9 @@ impl<'s> From<&'s str> for Stage {
             "parse" => Stage::Parse,
             "type" => Stage::Type,
             "normal" => Stage::Normal,
+            "alpha" => Stage::Alpha,
+            "closure" => Stage::Closure,
+            "vmcode" => Stage::VMCode,
             _ => panic!("Unknown stage"),
         }
     }
@@ -117,6 +123,16 @@ fn main() {
         println!("{:?}\n{}", norm_exp, sep);
         let mut out = String::new();
         norm_exp.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
+        println!("{}", sep);
+        dump_extenv();
+        return;
+    }
+    let alpha_exp = alpha::f(&norm_exp);
+    if args.stage == Stage::Alpha {
+        println!("{:?}\n{}", alpha_exp, sep);
+        let mut out = String::new();
+        alpha_exp.pp(&mut out, 0).expect("unable to pretty print!");
         println!("{}", out);
         println!("{}", sep);
         dump_extenv();
