@@ -39,19 +39,21 @@ possible.
 * Lexer - done
 * Parser - done
 * Type inference/checking - done
-* K-Normalization (conversion to SSA form) - mostly done
-* α-Conversion - in progress
+* K-Normalization (conversion to SSA form) - done
+* α-Conversion - done
 * Optimizations
   * β-Reduction
   * let-Reduction
   * inline expansion
   * constant folding
   * unnecessary definition elimination
-* Closure Conversion
+* Closure Conversion - in progress
 * Code generation
 * System library
+  * for reference interpreter
 * Reference interpreter
 * REPL
+  * for reference interpreter
 * Command line - in progress
 
 <!--
