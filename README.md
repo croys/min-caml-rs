@@ -17,6 +17,8 @@
 
 </pre>
 
+![Screenshot](min-caml-rs-grab.png)
+
 ## About min-caml-rs
 
 This is a port of min-caml from OCaml to Rust.
