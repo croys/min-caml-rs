@@ -558,21 +558,19 @@ impl T {
                 },
                 ref e2,
             ) => {
-                fmt::write(out, format_args!("LetRec {} : {:?} =\n", x.0, t))?;
-                spcs(out, ind + 2)?;
-                fmt::write(out, format_args!("\\"))?;
-                let mut first = true;
+                fmt::write(
+                    out,
+                    format_args!("LetRec {} : {:?} = (\n", x.0, t),
+                )?;
                 for (ref y, ref t) in yts {
-                    if first {
-                        first = false;
-                    } else {
-                        fmt::write(out, format_args!(", "))?;
-                    }
-                    fmt::write(out, format_args!("({} : {:?})", y.0, t))?;
+                    spcs(out, ind + 1)?;
+                    fmt::write(out, format_args!("{} : {:?}\n", y.0, t))?;
                 }
-                fmt::write(out, format_args!(" ->\n"))?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!(") ->\n"))?;
                 e1.pp(out, ind + 1)?;
-                fmt::write(out, format_args!("  in\n"))?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
                 e2.pp(out, ind + 1)
             }
             App(ref x, ref ys) | ExtFunApp(ref x, ref ys) => {
@@ -608,8 +606,10 @@ impl T {
                     nl(out)?;
                 }
                 spcs(out, ind + 1)?;
-                fmt::write(out, format_args!(") = {} in\n", x.0))?;
-                e.pp(out, ind + 2)
+                fmt::write(out, format_args!(") = {}\n", x.0))?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
+                e.pp(out, ind + 1)
             }
             Put(ref x, ref y, ref z) => {
                 fmt::write(out, format_args!("Put {} {} {}", x.0, y.0, z.0))

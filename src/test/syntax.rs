@@ -49,6 +49,6 @@ fn test_pp() {
         Add(b(Var(id::T("x".into()))), b(Int(1)))
             .pp(&mut output, 0)
             .expect("failed to write");
-        assert_eq!("Add\n Var(\"x\")\n Int(1)", output);
+        assert_eq!("Add\n Var(x)\n Int(1)", output);
     }
 }

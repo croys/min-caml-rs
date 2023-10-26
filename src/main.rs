@@ -66,7 +66,19 @@ struct Args {
     stage: Stage,
 }
 
+#[allow(clippy::needless_return)]
 fn main() {
+    fn dump_extenv() {
+        typing::EXTENV.with(|extenv_| {
+            let extenv = extenv_.borrow();
+            for (id, t) in extenv.iter() {
+                println!("{} : {:?}", id.0, typing::deref_typ(t));
+            }
+        })
+    }
+
+    let sep = "--------";
+
     let args = Args::parse();
 
     let contents =
@@ -79,8 +91,7 @@ fn main() {
     }
     let ast = parser::parser::exp(&lexemes, ()).expect("Parsing failed");
     if args.stage == Stage::Parse {
-        println!("{:?}", ast);
-        // FIXME: deref
+        println!("{:?}\n{}", ast, sep);
         let mut out = String::new();
         ast.pp(&mut out, 0).expect("unable to pretty print!");
         println!("{}", out);
@@ -92,21 +103,23 @@ fn main() {
     }
     let typed_ast = typed_res.unwrap();
     if args.stage == Stage::Type {
-        println!("{:?}", typed_ast);
-        // FIXME: deref
+        println!("{:?}\n{}", typed_ast, sep);
+        let typed_ast_ = typing::deref_term(&typed_ast);
         let mut out = String::new();
-        ast.pp(&mut out, 0).expect("unable to pretty print!");
+        typed_ast_.pp(&mut out, 0).expect("unable to pretty print!");
         println!("{}", out);
-        // FIXME: dump extenv
+        println!("{}", sep);
+        dump_extenv();
         return;
     }
     let norm_exp = k_normal::f(&typed_ast);
     if args.stage == Stage::Normal {
-        println!("{:?}", norm_exp);
+        println!("{:?}\n{}", norm_exp, sep);
         let mut out = String::new();
         norm_exp.pp(&mut out, 0).expect("unable to pretty print!");
         println!("{}", out);
-        // FIXME: dump extenv
-        // return;
+        println!("{}", sep);
+        dump_extenv();
+        return;
     }
 }

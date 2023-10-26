@@ -139,17 +139,15 @@ impl Syntax {
                 e3.pp(out, ind + 1)
             }
             // Irregular
-            Let((ref id, ref t), ref e1, ref e2) => {
-                fmt::write(out, format_args!("Let\n"))?;
-                spcs(out, ind + 2)?;
-                fmt::write(out, format_args!("{:?}\n", id.0))?;
-                spcs(out, ind + 2)?;
-                fmt::write(out, format_args!("{:?}\n", t))?;
+            Let((ref x, ref t), ref e1, ref e2) => {
+                fmt::write(out, format_args!("Let {} : {:?} =\n", x.0, t))?;
                 e1.pp(out, ind + 1)?;
                 nl(out)?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
                 e2.pp(out, ind + 1)
             }
-            Var(ref id) => fmt::write(out, format_args!("Var({:?})", id.0)),
+            Var(ref id) => fmt::write(out, format_args!("Var({})", id.0)),
             LetRec(
                 Fundef {
                     name: (ref x, ref t),
@@ -158,20 +156,21 @@ impl Syntax {
                 },
                 ref e2,
             ) => {
-                fmt::write(out, format_args!("LetRec\n"))?;
-                spcs(out, ind + 1)?;
-                fmt::write(out, format_args!("{:?}\n", x.0))?;
-                spcs(out, ind + 1)?;
-                fmt::write(out, format_args!("{:?}\n", t))?;
+                fmt::write(
+                    out,
+                    format_args!("LetRec {} : {:?} = (\n", x.0, t),
+                )?;
                 for (y, t) in yts.iter() {
-                    spcs(out, ind + 2)?;
-                    fmt::write(out, format_args!("{:?}\n", y.0))?;
-                    spcs(out, ind + 2)?;
-                    fmt::write(out, format_args!("{:?}\n", t))?;
+                    spcs(out, ind + 1)?;
+                    fmt::write(out, format_args!("{} : {:?}\n", y.0, t))?;
                 }
-                e2.pp(out, ind + 1)?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!(") ->\n"))?;
+                e1.pp(out, ind + 1)?;
                 nl(out)?;
-                e1.pp(out, ind + 1)
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
+                e2.pp(out, ind + 1)
             }
             App(ref e1, ref es) => {
                 fmt::write(out, format_args!("App\n"))?;
@@ -191,17 +190,17 @@ impl Syntax {
                 Ok(())
             }
             LetTuple(ref xts, ref e1, ref e2) => {
-                fmt::write(out, format_args!("LetTuple\n"))?;
+                fmt::write(out, format_args!("LetTuple (\n"))?;
                 for (x, t) in xts.iter() {
                     spcs(out, ind + 2)?;
-                    fmt::write(out, format_args!("{:?}\n", x.0))?;
-                    nl(out)?;
-                    spcs(out, ind + 2)?;
-                    fmt::write(out, format_args!("{:?}\n", t))?;
-                    nl(out)?;
+                    fmt::write(out, format_args!("{} : {:?}\n", x.0, t))?;
                 }
+                spcs(out, ind)?;
+                fmt::write(out, format_args!(") =\n"))?;
                 e1.pp(out, ind + 1)?;
                 nl(out)?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
                 e2.pp(out, ind + 1)
             }
         }
