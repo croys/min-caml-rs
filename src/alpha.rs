@@ -10,6 +10,7 @@ type KNormal = k_normal::T;
 
 fn find(x: &Id, env: &im::HashMap<Id, Id>) -> Id {
     let id_ = env.get(x);
+    eprintln!("find: {:?} -> {:?}", x, id_);
     match id_ {
         Some(y) => y.clone(),
         None => x.clone(),
@@ -60,6 +61,7 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
             // letのα変換
             // - α-conversion for let
             let x_ = id::genid(x);
+            eprintln!("Let: {:?} -> {:?}", x, x_);
             Let(
                 (x_.clone(), t.clone()),
                 bg(env, e1),

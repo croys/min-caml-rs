@@ -65,6 +65,7 @@ impl<'s> From<&'s str> for Stage {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    // FIXME: option to do dump all stagers from X to Y
     /// Source file
     filename: String,
 
@@ -137,6 +138,11 @@ fn main() {
         println!("{}", out);
         println!("{}", sep);
         dump_extenv();
+        return;
+    }
+    let closure = closure::f(&alpha_exp);
+    if args.stage == Stage::Closure {
+        println!("{:?}\n{}", closure, sep);
         return;
     }
 }
