@@ -6,6 +6,7 @@ use crate::k_normal::FunDef as KFunDef;
 use crate::ty::Type;
 
 use std::cell::RefCell;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Closure {
@@ -217,25 +218,20 @@ pub fn g(
             };
             /* 自由変数のリスト */
             let zs: Vec<id::T> = Vec::from_iter(
-                (fv(&e1_)
-                .difference(
+                (fv(&e1_).difference(
                     S::unit(x.clone())
                         + S::from_iter(yts.iter().map(|(ref y, _)| y.clone())),
                 ))
                 .iter()
-                .cloned()
+                .cloned(),
             );
             /* ここで自由変数zの型を引くために引数envが必要 */
             // let zts =
             //     zs.iter().map(|z| (z.clone(), env_[z].clone()));
-            let zts =
-                zs.iter().map(|z| {
-                    match env_.get(z) {
-                        Some(t) => (z.clone(), t.clone()),
-                        None => panic!("No type for {:?} in {:?}", z, env_),
-                    }
-                }
-            );
+            let zts = zs.iter().map(|z| match env_.get(z) {
+                Some(t) => (z.clone(), t.clone()),
+                None => panic!("No type for {:?} in {:?}", z, env_),
+            });
             /* トップレベル関数を追加 */
             TOPLEVEL.with(|toplevel_| {
                 let mut toplevel = toplevel_.borrow_mut();
@@ -298,4 +294,213 @@ pub fn f(e: &k_normal::T) -> Prog {
     TOPLEVEL.with(|toplevel_| {
         Prog::Prog(toplevel_.borrow().iter().rev().cloned().collect(), e_)
     })
+}
+
+// Pretty printing
+
+// FIXME: refactor these
+fn spcs(out: &mut dyn std::fmt::Write, n: u32) -> Result<(), std::fmt::Error> {
+    for _ in 0..n {
+        fmt::write(out, format_args!(" "))?;
+    }
+    Ok(())
+}
+
+fn nl(out: &mut dyn std::fmt::Write) -> Result<(), std::fmt::Error> {
+    fmt::write(out, format_args!("\n"))
+}
+
+impl T {
+    pub fn pp(
+        &self,
+        out: &mut dyn std::fmt::Write,
+        ind: u32,
+    ) -> Result<(), std::fmt::Error> {
+        use T::*;
+        spcs(out, ind)?;
+
+        match *self {
+            Unit => fmt::write(out, format_args!("Unit")),
+            Int(ref i) => fmt::write(out, format_args!("Int({})", i)),
+            Float(ref d) => fmt::write(out, format_args!("Float({})", d)),
+
+            // Unary operators
+            Neg(ref x) | FNeg(ref x) | Var(ref x) => {
+                let c = match *self {
+                    Neg(_) => "Neg",
+                    FNeg(_) => "FNeg",
+                    Var(_) => "Var",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {}\n", c, x.0))
+            }
+
+            // Binary operators
+            Add(ref x, ref y)
+            | Sub(ref x, ref y)
+            | FAdd(ref x, ref y)
+            | FSub(ref x, ref y)
+            | FMul(ref x, ref y)
+            | FDiv(ref x, ref y)
+            | Get(ref x, ref y) => {
+                let c = match *self {
+                    Add(_, _) => "Add",
+                    Sub(_, _) => "Sub",
+                    FAdd(_, _) => "FAdd",
+                    FSub(_, _) => "FSub",
+                    FMul(_, _) => "FMul",
+                    FDiv(_, _) => "FDiv",
+                    Get(_, _) => "Get",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {} {}", c, x.0, y.0))
+            }
+            // Branches
+            IfEq(ref x, ref y, ref e1, ref e2)
+            | IfLE(ref x, ref y, ref e1, ref e2)
+            | IfLt(ref x, ref y, ref e1, ref e2)
+            | IfGt(ref x, ref y, ref e1, ref e2)
+            | IfGe(ref x, ref y, ref e1, ref e2) => {
+                let c = match *self {
+                    IfEq(_, _, _, _) => "IfEq",
+                    IfLE(_, _, _, _) => "IfLE",
+                    IfLt(_, _, _, _) => "IfLt",
+                    IfGt(_, _, _, _) => "IfGt",
+                    IfGe(_, _, _, _) => "IfGe",
+                    _ => unreachable!(),
+                };
+                fmt::write(out, format_args!("{} {} {}\n", c, x.0, y.0))?;
+                e1.pp(out, ind + 1)?;
+                nl(out)?;
+                e2.pp(out, ind + 1)
+            }
+            Let((ref x, ref t), ref e1, ref e2) => {
+                fmt::write(out, format_args!("Let {} : {:?} =\n", x.0, t))?;
+                e1.pp(out, ind + 1)?;
+                nl(out)?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
+                e2.pp(out, ind + 1)
+            }
+            // FIXME: MakeCls
+            MakeCls(
+                (ref x, ref t),
+                Closure {
+                    entry: ref l,
+                    actual_fv: ref ys,
+                },
+                ref e2,
+            ) => {
+                fmt::write(out, format_args!("MakeCls {} : {:?}\n", x.0, t))?;
+                spcs(out, ind + 1)?;
+                fmt::write(out, format_args!("{:?}\n", l))?;
+                spcs(out, ind + 1)?;
+                fmt::write(out, format_args!("["))?;
+                for y in ys {
+                    fmt::write(out, format_args!(" {}", y.0))?;
+                }
+                fmt::write(out, format_args!(" ]\n"))?;
+                e2.pp(out, ind + 1)
+            }
+            AppCls(ref f, ref xs) => {
+                fmt::write(out, format_args!("AppCls {} (", f.0))?;
+                for x in xs {
+                    fmt::write(out, format_args!(" {}", x.0))?;
+                }
+                fmt::write(out, format_args!(" )"))
+            }
+            AppDir(ref l, ref xs) => {
+                fmt::write(out, format_args!("AppDir {} (", l.0))?;
+                for x in xs {
+                    fmt::write(out, format_args!(" {}", x.0))?;
+                }
+                fmt::write(out, format_args!(" )"))
+            }
+            Tuple(ref xs) => {
+                fmt::write(out, format_args!("Tuple ("))?;
+                let mut first = true;
+                for x in xs {
+                    if first {
+                        first = false;
+                    } else {
+                        fmt::write(out, format_args!(", "))?;
+                    }
+                    fmt::write(out, format_args!("{}", x.0))?;
+                }
+                fmt::write(out, format_args!(")"))
+            }
+            LetTuple(ref xts, ref x, ref e) => {
+                fmt::write(out, format_args!("LetTuple (\n"))?;
+                for (ref x, ref t) in xts {
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!("{} : {:?}", x.0, t))?;
+                    nl(out)?;
+                }
+                spcs(out, ind + 1)?;
+                fmt::write(out, format_args!(") = {}\n", x.0))?;
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("in\n"))?;
+                e.pp(out, ind + 1)
+            }
+            Put(ref x, ref y, ref z) => {
+                fmt::write(out, format_args!("Put {} {} {}", x.0, y.0, z.0))
+            }
+            ExtArray(ref l) => {
+                fmt::write(out, format_args!("ExtArray {}", l.0))
+            }
+        }
+    }
+}
+
+impl Prog {
+    pub fn pp(
+        &self,
+        out: &mut dyn std::fmt::Write,
+        ind: u32,
+    ) -> Result<(), std::fmt::Error> {
+        match *self {
+            Prog::Prog(ref fds, ref e) => {
+                spcs(out, ind)?;
+                fmt::write(out, format_args!("Prog\n"))?;
+                for FunDef {
+                    name: (ref l, ref t),
+                    args: yts,
+                    formal_fv: ref fvs,
+                    body: e,
+                } in fds
+                {
+                    spcs(out, ind + 1)?;
+                    fmt::write(out, format_args!("FunDef\n"))?;
+                    spcs(out, ind + 2)?;
+                    fmt::write(
+                        out,
+                        format_args!("name =  {} : {:?}\n", l.0, t),
+                    )?;
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!("args = (\n"))?;
+                    for (ref y, ref t) in yts {
+                        spcs(out, ind + 3)?;
+                        fmt::write(out, format_args!("{} : {:?}\n", y.0, t))?;
+                    }
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!(")\n"))?;
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!("fvs = (\n",))?;
+                    for (ref x, ref t) in fvs {
+                        spcs(out, ind + 3)?;
+                        fmt::write(out, format_args!(" {} : {:?}\n", x.0, t))?;
+                    }
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!(")\n"))?;
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!("body = (\n"))?;
+                    e.pp(out, ind + 3)?;
+                    nl(out)?;
+                    spcs(out, ind + 2)?;
+                    fmt::write(out, format_args!(")\n"))?;
+                }
+                e.pp(out, ind)
+            }
+        }
+    }
 }
