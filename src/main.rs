@@ -143,6 +143,11 @@ fn main() {
     let closure = closure::f(&alpha_exp);
     if args.stage == Stage::Closure {
         println!("{:?}\n{}", closure, sep);
+        let mut out = String::new();
+        closure.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
+        println!("{}", sep);
+        dump_extenv();
         return;
     }
 }
