@@ -322,32 +322,44 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
                 // a simple imperative equivalent.
 
                 // normalize arguments
-                let nes = e2s.iter().map(|e2| {
-                    let (e2_, e2_t) = g(env, e2);
-                    match e2_ {
-                        Var(ref x) => (x.clone(), e2_, e2_t),
-                        _ => {
-                            let x = id::gentmp(&e2_t);
-                            (x, e2_, e2_t)
+                let nes: Vec<(id::T, T, Type)> = e2s
+                    .iter()
+                    .map(|e2| {
+                        let (e2_, e2_t) = g(env, e2);
+                        match e2_ {
+                            Var(ref x) => (x.clone(), e2_, e2_t),
+                            _ => {
+                                let x = id::gentmp(&e2_t);
+                                eprintln!(
+                                    "fun app id gen: ({:?}, {:?}, {:?})",
+                                    x, e2_, e2_t
+                                );
+                                (x, e2_, e2_t)
+                            }
                         }
-                    }
-                });
-
+                    })
+                    .collect();
+                eprintln!("nes: {:?}", nes);
                 // base expression is external call
                 // using all ids
-                let re0 =
-                    app(f.clone(), nes.clone().map(|(x, _, _)| x).collect());
+                let re0 = app(
+                    f.clone(),
+                    nes.iter().map(|(x, _, _)| x.clone()).collect(),
+                );
 
                 // iterate right to left
                 // to build necessary let expressions
                 //
                 let mut res = re0;
-                for (id, e, t) in nes.rev() {
+                for (id, e, t) in nes.iter().rev() {
+                    eprintln!("considering for let: {:?} -> {:?}", id, e);
                     if let Var(_x) = e {
                         // no need for let
                     } else {
                         // insert let
-                        res = Let((id, t), b(e), b(res));
+                        eprintln!("inserting let for {:?}", id);
+                        res =
+                            Let((id.clone(), t.clone()), b(e.clone()), b(res));
                     }
                 }
                 res
@@ -569,6 +581,7 @@ impl T {
                 spcs(out, ind)?;
                 fmt::write(out, format_args!(") ->\n"))?;
                 e1.pp(out, ind + 1)?;
+                nl(out)?;
                 spcs(out, ind)?;
                 fmt::write(out, format_args!("in\n"))?;
                 e2.pp(out, ind + 1)
