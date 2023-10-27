@@ -47,8 +47,8 @@ possible.
   * inline expansion
   * constant folding
   * unnecessary definition elimination
-* Closure Conversion - in progress
-* Code generation
+* Closure Conversion - done
+* Code generation - in progress
 * System library
   * for reference interpreter
 * Reference interpreter
