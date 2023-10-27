@@ -161,11 +161,14 @@ pub fn g(
             b(&g(env, known, e1)),
             b(&g(env, known, e2)),
         ),
-        K::Let((x, t), e1, e2) => Let(
-            (x.clone(), t.clone()),
-            b(&g(env, known, e1)),
-            b(&g(env, known, e2)),
-        ),
+        K::Let((x, t), e1, e2) => {
+            eprintln!("Let: adding {:?} : {:?}", x, t);
+            Let(
+                (x.clone(), t.clone()),
+                b(&g(env, known, e1)),
+                b(&g(&env.update(x.clone(), t.clone()), known, e2)),
+            )
+        }
         K::Var(x) => Var(x.clone()),
         K::LetRec(
             KFunDef {
@@ -213,17 +216,26 @@ pub fn g(
                 (known.clone(), e1_)
             };
             /* 自由変数のリスト */
-            let zs: Vec<id::T> = fv(&e1_)
+            let zs: Vec<id::T> = Vec::from_iter(
+                (fv(&e1_)
                 .difference(
                     S::unit(x.clone())
                         + S::from_iter(yts.iter().map(|(ref y, _)| y.clone())),
-                )
+                ))
                 .iter()
                 .cloned()
-                .collect();
+            );
             /* ここで自由変数zの型を引くために引数envが必要 */
+            // let zts =
+            //     zs.iter().map(|z| (z.clone(), env_[z].clone()));
             let zts =
-                zs.iter().map(|z| (z.clone(), env_.get(z).unwrap().clone()));
+                zs.iter().map(|z| {
+                    match env_.get(z) {
+                        Some(t) => (z.clone(), t.clone()),
+                        None => panic!("No type for {:?} in {:?}", z, env_),
+                    }
+                }
+            );
             /* トップレベル関数を追加 */
             TOPLEVEL.with(|toplevel_| {
                 let mut toplevel = toplevel_.borrow_mut();
@@ -257,7 +269,7 @@ pub fn g(
         }
         K::App(x, ys) if known.contains(x) => {
             /* 関数適用の場合 */
-            eprint!("directly applying {}@.", x.0);
+            eprintln!("directly applying {}@.", x.0);
             AppDir(id::L(x.0.clone()), ys.clone())
         }
         K::App(f, xs) => AppCls(f.clone(), xs.clone()),
