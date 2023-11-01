@@ -10,8 +10,8 @@ use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Closure {
-    entry: id::L,
-    actual_fv: Vec<id::T>,
+    pub entry: id::L,
+    pub actual_fv: Vec<id::T>,
 }
 
 // クロージャ変換後の式
@@ -48,10 +48,10 @@ pub enum T {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FunDef {
-    name: (id::L, Type),
-    args: Vec<(id::T, Type)>,
-    formal_fv: Vec<(id::T, Type)>,
-    body: T,
+    pub name: (id::L, Type),
+    pub args: Vec<(id::T, Type)>,
+    pub formal_fv: Vec<(id::T, Type)>,
+    pub body: T,
 }
 
 #[derive(Debug, PartialEq, Clone)]
