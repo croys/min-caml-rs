@@ -12,6 +12,7 @@
 //#![feature(box_patterns)]
 
 mod alpha;
+mod asm;
 mod closure;
 mod id;
 mod k_normal;
@@ -20,6 +21,7 @@ mod parser;
 mod syntax;
 mod ty;
 mod typing;
+mod r#virtual;
 
 #[cfg(test)]
 mod test;
