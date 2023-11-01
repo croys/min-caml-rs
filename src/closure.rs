@@ -180,10 +180,17 @@ pub fn g(
             e2,
         ) => {
             // 関数定義の場合
+            // - Function definition case
             /*
                 関数定義let rec x y1 ... yn = e1 in e2の場合は、
                 xに自由変数がない(closureを介さずdirectに呼び出せる)
                 と仮定し、knownに追加してe1をクロージャ変換してみる
+            */
+            /*
+            In the case of a function definition
+            `let rec x y1 ... yn = e1 in e2``, with `x` supposed not free
+            (no intermediate closure, direct call), append to `known` and
+            closure-convert `e1`
             */
             let toplevel_backup =
                 TOPLEVEL.with(|toplevel_| toplevel_.borrow().clone());
@@ -193,8 +200,14 @@ pub fn g(
             env__.extend(yts.iter().cloned());
             let e1_ = g(&env__, &known_, e1);
             /* 本当に自由変数がなかったか、変換結果e1'を確認する */
+            /* Check there are no free variables in the result of conversion e1' (e1_) */
+
             /* 注意: e1'にx自身が変数として出現する場合はclosureが必要!
             (thanks to nuevo-namasute and azounoman; test/cls-bug2.ml参照) */
+            /*
+            Warning: A closure is necessary when variable `x` appears in e1' (e1_)!
+            (thanks to nuevo-namasute and azounoman; see test/cls-bug2.ml
+             */
             let zs = fv(&e1_)
                 .difference(S::from_iter(yts.iter().map(|(y, _)| y.clone())));
             let (known_, e1_) = if zs.is_empty() {
@@ -202,6 +215,10 @@ pub fn g(
             } else {
                 /* 駄目だったら状態(toplevelの値)を戻して、
                 クロージャ変換をやり直す */
+                /*
+                When an error is returned (in a top-level value),
+                redo closure conversion.
+                 */
                 eprintln!(
                     "free variable(s) {:?} found in function {}@.",
                     zs, x.0,
@@ -217,6 +234,7 @@ pub fn g(
                 (known.clone(), e1_)
             };
             /* 自由変数のリスト */
+            /* free variable list */
             let zs: Vec<id::T> = Vec::from_iter(
                 (fv(&e1_).difference(
                     S::unit(x.clone())
@@ -226,6 +244,10 @@ pub fn g(
                 .cloned(),
             );
             /* ここで自由変数zの型を引くために引数envが必要 */
+            /*
+            Here `env` is necessary to look up the type of free
+            variables `z`
+            */
             // let zts =
             //     zs.iter().map(|z| (z.clone(), env_[z].clone()));
             let zts = zs.iter().map(|z| match env_.get(z) {
@@ -233,6 +255,7 @@ pub fn g(
                 None => panic!("No type for {:?} in {:?}", z, env_),
             });
             /* トップレベル関数を追加 */
+            /* add to toplevel */
             TOPLEVEL.with(|toplevel_| {
                 let mut toplevel = toplevel_.borrow_mut();
                 toplevel.insert(
@@ -247,8 +270,10 @@ pub fn g(
             });
             let e2_ = g(&env_, &known_, e2);
             /* xが変数としてe2'に出現するか */
+            /* whether variable `x` appears in e2' (e2_) */
             if fv(&e2_).contains(x) {
                 /* 出現していたら削除しない  */
+                /* don't erase if it appeared */
                 MakeCls(
                     (x.clone(), t.clone()),
                     Closure {
@@ -259,12 +284,14 @@ pub fn g(
                 )
             } else {
                 /* 出現しなければMakeClsを削除 */
+                /* erase MakeCls if it didn't appear */
                 eprintln!("eliminating closure(s) {}@.", x.0);
                 e2_
             }
         }
         K::App(x, ys) if known.contains(x) => {
             /* 関数適用の場合 */
+            /* function application case */
             eprintln!("directly applying {}@.", x.0);
             AppDir(id::L(x.0.clone()), ys.clone())
         }
