@@ -244,9 +244,6 @@ pub fn g(
                 .iter()
                 .cloned(),
             );
-            eprintln!("fv(e1_) = {:?}", fv(&e1_));
-            eprintln!("yts = {:?}", yts);
-            eprintln!("zs = {:?}", zs);
             /* ここで自由変数zの型を引くために引数envが必要 */
             /*
             Here `env` is necessary to look up the type of free
