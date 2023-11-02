@@ -59,7 +59,7 @@ pub enum Prog {
     Prog(Vec<FunDef>, T),
 }
 
-fn fv(e: &T) -> im::hashset::HashSet<id::T> {
+pub fn fv(e: &T) -> im::hashset::HashSet<id::T> {
     type S = im::hashset::HashSet<id::T>;
     use T::*;
     match e {
