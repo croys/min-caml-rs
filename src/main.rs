@@ -71,7 +71,8 @@ struct Args {
     /// Source file
     filename: String,
 
-    /// dump compiler output as of given stage: Lex, Parse, Type, Normal
+    /// dump compiler output as of given stage: Lex, Parse, Type, Normal,
+    /// Alpha, Closure, VMCode
     #[arg(short, long, default_value_t = Stage::Normal)]
     stage: Stage,
 }
@@ -147,6 +148,16 @@ fn main() {
         println!("{:?}\n{}", closure, sep);
         let mut out = String::new();
         closure.pp(&mut out, 0).expect("unable to pretty print!");
+        println!("{}", out);
+        println!("{}", sep);
+        dump_extenv();
+        return;
+    }
+    let vmcode = r#virtual::f(&closure);
+    if args.stage == Stage::VMCode {
+        println!("{:?}\n{}", vmcode, sep);
+        let mut out = String::new();
+        vmcode.pp(&mut out, 0).expect("unable to pretty print!");
         println!("{}", out);
         println!("{}", sep);
         dump_extenv();
