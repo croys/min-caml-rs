@@ -1,3 +1,4 @@
+mod closure;
 #[rustfmt::skip] mod lexer;
 #[rustfmt::skip] mod parser;
 mod k_normal;
