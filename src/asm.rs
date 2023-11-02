@@ -1,5 +1,4 @@
 #![allow(dead_code)] // FIXME:
-#![allow(unused_variables)] // FIXME:
 
 // Translated from x86/asm.ml
 
@@ -7,6 +6,8 @@
 
 use crate::id;
 use crate::ty::Type;
+
+use once_cell::sync::Lazy;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IdOrImm {
@@ -62,11 +63,11 @@ pub enum Exp {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FunDef {
-    name: id::L,
-    args: Vec<id::T>,
-    fargs: Vec<id::T>,
-    body: T,
-    ret: Type,
+    pub name: id::L,
+    pub args: Vec<id::T>,
+    pub fargs: Vec<id::T>,
+    pub body: T,
+    pub ret: Type,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -74,6 +75,39 @@ pub enum Prog {
     Prog(Vec<(id::L, f64)>, Vec<FunDef>, T),
 }
 
-pub fn concat(e1: &T, xt: (id::T, Type), e2: &T) -> T {
-    todo!()
+pub fn fletd(x: &id::T, e1: &Exp, e2: &T) -> T {
+    T::Let(
+        (x.clone(), Type::Float),
+        Box::new(e1.clone()),
+        Box::new(e2.clone()),
+    )
 }
+
+pub fn seq(e1: &Exp, e2: &T) -> T {
+    T::Let(
+        (id::gentmp(&Type::Unit), Type::Unit),
+        Box::new(e1.clone()),
+        Box::new(e2.clone()),
+    )
+}
+
+pub fn concat(e1: &T, xt: (id::T, Type), e2: &T) -> T {
+    use T::*;
+    match e1 {
+        Ans(exp) => Let(xt, Box::new(exp.clone()), Box::new(e2.clone())),
+        Let(yt, exp, e1_) => {
+            Let(yt.clone(), exp.clone(), Box::new(concat(e1_, xt, e2)))
+        }
+    }
+}
+
+pub fn align(i: i32) -> i32 {
+    if i % 8 == 0 {
+        i
+    } else {
+        i + 4
+    }
+}
+
+pub static REG_HP: Lazy<id::T> =
+    Lazy::new(|| id::T(String::from("min_caml_hp")));
