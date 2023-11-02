@@ -79,8 +79,9 @@ pub fn fv(e: T) -> im::hashset::HashSet<id::T> {
             },
             e2,
         ) => {
-            let zs = fv(*e1)
-                .difference(S::from_iter(yts.iter().map(|(x, _)| x.clone())));
+            let zs = fv(*e1).relative_complement(S::from_iter(
+                yts.iter().map(|(x, _)| x.clone()),
+            ));
             (zs + fv(*e2)).without(&x)
         }
         App(x, ys) => S::from_iter([x].into_iter().chain(ys)),
@@ -88,8 +89,9 @@ pub fn fv(e: T) -> im::hashset::HashSet<id::T> {
         Put(x, y, z) => S::from_iter([x, y, z]),
         LetTuple(xs, y, e) => {
             S::unit(y)
-                + fv(*e)
-                    .difference(S::from_iter(xs.into_iter().map(|(x, _)| x)))
+                + fv(*e).relative_complement(S::from_iter(
+                    xs.into_iter().map(|(x, _)| x),
+                ))
         }
     }
 }

@@ -95,7 +95,7 @@ pub fn fv(e: &T) -> im::hashset::HashSet<id::T> {
         AppDir(_, ys) | Tuple(ys) => S::from_iter(ys.iter().cloned()),
         LetTuple(xts, y, e) => {
             S::unit(y.clone())
-                + fv(e).difference(S::from_iter(
+                + fv(e).relative_complement(S::from_iter(
                     xts.iter().map(|(x, _)| x.clone()),
                 ))
         }
@@ -208,8 +208,9 @@ pub fn g(
             Warning: A closure is necessary when variable `x` appears in e1' (e1_)!
             (thanks to nuevo-namasute and azounoman; see test/cls-bug2.ml
              */
-            let zs = fv(&e1_)
-                .difference(S::from_iter(yts.iter().map(|(y, _)| y.clone())));
+            let zs = fv(&e1_).relative_complement(S::from_iter(
+                yts.iter().map(|(y, _)| y.clone()),
+            ));
             let (known_, e1_) = if zs.is_empty() {
                 (known_, e1_)
             } else {
@@ -236,13 +237,16 @@ pub fn g(
             /* 自由変数のリスト */
             /* free variable list */
             let zs: Vec<id::T> = Vec::from_iter(
-                (fv(&e1_).difference(
+                (fv(&e1_).relative_complement(
                     S::unit(x.clone())
                         + S::from_iter(yts.iter().map(|(ref y, _)| y.clone())),
                 ))
                 .iter()
                 .cloned(),
             );
+            eprintln!("fv(e1_) = {:?}", fv(&e1_));
+            eprintln!("yts = {:?}", yts);
+            eprintln!("zs = {:?}", zs);
             /* ここで自由変数zの型を引くために引数envが必要 */
             /*
             Here `env` is necessary to look up the type of free
