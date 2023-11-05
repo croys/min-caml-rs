@@ -24,7 +24,7 @@ type BuiltinFn = Rc<dyn Fn(&mut State, &[Val], &[Val]) -> Val>;
 #[derive(Clone)]
 pub enum Callable {
     Interpret(Rc<asm::FunDef>),
-    Builtin(String, BuiltinFn),
+    Builtin(Rc<String>, BuiltinFn),
 }
 
 impl std::fmt::Debug for Callable {
@@ -427,7 +427,7 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
         mem.insert(
             addr,
             Val::Fun(Callable::Builtin(
-                String::from("builtin_") + name,
+                Rc::new(String::from("builtin_") + name),
                 f.clone(),
             )),
         );
