@@ -176,7 +176,8 @@ fn main() {
                 return;
             }
             if args.stage == Stage::Interp {
-                let val = interp::f(&vmcode);
+                let (val, st) = interp::f(&vmcode);
+                println!("{}\n{:?}\n{}", sep, st, sep);
                 println!("{}\n{:?}\n{}", sep, val, sep);
                 return;
             }

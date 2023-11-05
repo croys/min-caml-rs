@@ -1,21 +1,30 @@
 //
 // Reference interpreter for the intermediate/"virtual" machine code
 //
+// Interprets the direct output from virtual::f
+//  - infinite registers with labels
+//  - no register spilling
+//
+// The deisgn is a simple SEMC machine:
+//
+// * S - Stack - implicit in Rust stack
+// * E - Environment- mapping form registers(id::T) to values
+// * M - memory:  mutable map from locations(integer) to values
+// * C - constants: built-ins, map from labels(id::L) to values
 
 #![allow(dead_code)] // FIXME:
 
 use crate::asm;
 use crate::id;
-use crate::ty::Type;
 use std::fmt::Formatter;
 use std::rc::Rc;
+
+type BuiltinFn = Rc<dyn Fn(&[Val], &[Val]) -> Val>;
 
 #[derive(Clone)]
 pub enum Callable {
     Interpret(asm::FunDef),
-    //Builtin(String, fn(&Vec<Val>, &Vec<Val>) -> Val),
-    //Builtin(String, Box<dyn Fn(&Vec<Val>, &Vec<Val>) -> Val + Clone>),
-    Builtin(String, Rc<dyn Fn(&Vec<Val>, &Vec<Val>) -> Val>),
+    Builtin(String, BuiltinFn),
 }
 
 impl std::fmt::Debug for Callable {
@@ -37,15 +46,6 @@ impl std::cmp::PartialEq for Callable {
             _ => false,
         }
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        use Callable::*;
-        match (self, other) {
-            (Interpret(ref fd0), Interpret(ref fd1)) => fd0 != fd1,
-            (Builtin(ref n0, _), Builtin(ref n1, _)) => n0 != n1,
-            _ => true,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -53,30 +53,25 @@ pub enum Val {
     Unit,
     Int(i32),
     Float(f64),
-    Array(Vec<Val>),
-    Tuple(Vec<Val>),
+    Array(Vec<Val>), // FIXME: necessary? we just hit memory directly
+    Tuple(Vec<Val>), // FIXME: necessary? we just hit memory directly
     Fun(Callable),
+    Label(id::L),
 }
 
-// S M C
-// S - call stack
-// M - memory
-// C - code
-
-// Main state is
-// static:
-// map from labels to values
-// map from labels to FunDefs
-
-// map from ids to values
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
     pub constants: std::collections::HashMap<id::L, Val>,
     pub env: im::hashmap::HashMap<id::T, Val>,
+    pub mem: std::collections::HashMap<i32, Val>,
 }
 
 fn get_int(st: &State, x: &id::T) -> i32 {
-    if let Val::Int(x1) = st.env.get(x).expect("missing value") {
+    if let Val::Int(x1) = st
+        .env
+        .get(x)
+        .unwrap_or_else(|| panic!("missing value: {}", x.0))
+    {
         *x1
     } else {
         panic!("expected int")
@@ -124,8 +119,8 @@ fn cond(
     st: &mut State,
     x: &id::T,
     y: &asm::IdOrImm,
-    e1: &Box<asm::T>,
-    e2: &Box<asm::T>,
+    e1: &asm::T,
+    e2: &asm::T,
     f: &dyn Fn(i32, i32) -> bool,
 ) -> Val {
     let x1 = get_int(st, x);
@@ -141,8 +136,8 @@ fn cond_f(
     st: &mut State,
     x: &id::T,
     y: &id::T,
-    e1: &Box<asm::T>,
-    e2: &Box<asm::T>,
+    e1: &asm::T,
+    e2: &asm::T,
     f: &dyn Fn(f64, f64) -> bool,
 ) -> Val {
     let x1 = get_float(st, x);
@@ -157,10 +152,10 @@ fn cond_f(
 fn call_interpreted(
     st: &mut State,
     f: &asm::FunDef,
-    args: &Vec<id::T>,
-    float_args: &Vec<id::T>,
+    args: &[id::T],
+    float_args: &[id::T],
 ) -> Val {
-    eprintln!("Applying {}", f.name.0);
+    //eprintln!("Applying {}", f.name.0);
     let env_orig = st.env.clone();
     let mut env_ = env_orig.clone();
     if args.len() != f.args.len() {
@@ -174,12 +169,12 @@ fn call_interpreted(
     for (name, val) in std::iter::zip(f.args.iter(), args.iter()) {
         let val = env_orig.get(val).expect("missing value");
         env_.insert(name.clone(), val.clone());
-        eprintln!("  arg: {:?}", val);
+        //eprintln!("  arg: {:?}", val);
     }
     for (name, val) in std::iter::zip(f.fargs.iter(), float_args.iter()) {
         let val = env_orig.get(val).expect("missing value");
         env_.insert(name.clone(), val.clone());
-        eprintln!("  farg: {:?}", val);
+        //eprintln!("  farg: {:?}", val);
     }
     st.env = env_;
     let res = g(st, &f.body);
@@ -189,10 +184,10 @@ fn call_interpreted(
 
 fn call_builtin(
     st: &mut State,
-    name: &String,
-    f: &Rc<dyn Fn(&Vec<Val>, &Vec<Val>) -> Val>,
-    args: &Vec<id::T>,
-    float_args: &Vec<id::T>,
+    _name: &str,
+    f: &BuiltinFn,
+    args: &[id::T],
+    float_args: &[id::T],
 ) -> Val {
     //eprintln!("Applying builtin {}", name);
     let mut args_ = Vec::new();
@@ -213,8 +208,8 @@ fn call_builtin(
 fn call_fun(
     st: &mut State,
     f: &Callable,
-    args: &Vec<id::T>,
-    float_args: &Vec<id::T>,
+    args: &[id::T],
+    float_args: &[id::T],
 ) -> Val {
     match f {
         Callable::Interpret(ref fd) => {
@@ -231,22 +226,38 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
     match e {
         Nop => Val::Unit,
         Set(ref i) => Val::Int(*i),
-        SetL(ref l) => {
-            // Look up constant
-            st.constants.get(l).expect("missing constant").clone()
-        }
-        Mov(ref x) => st.env.get(x).expect("missing value").clone(),
+        SetL(ref l) => Val::Label(l.clone()),
+        Mov(ref x) => st
+            .env
+            .get(x)
+            .unwrap_or_else(|| panic!("missing value '{}'", x.0))
+            .clone(),
         Neg(ref x) => {
             let x1 = get_int(st, x);
             Val::Int(-x1)
         }
         Add(ref x, ref y) => int_binop(st, x, y, &|x, y| x + y),
         Sub(ref x, ref y) => int_binop(st, x, y, &|x, y| x - y),
-        Ld(arr, idx, _al) => {
-            todo!()
+        Ld(arr, idx, al) => {
+            let arr_base = get_int(st, arr);
+            let idx_ = id_or_imm(st, idx);
+            let addr = arr_base + al * idx_;
+            st.mem
+                .get(&addr)
+                .unwrap_or_else(|| panic!("missing value at address: {}", addr))
+                .clone()
         }
-        St(v, arr, idx, _al) => {
-            todo!()
+        St(x, arr, idx, al) => {
+            let val = st
+                .env
+                .get(x)
+                .unwrap_or_else(|| panic!("missing value '{}'", x.0))
+                .clone();
+            let arr_base = get_int(st, arr);
+            let idx_ = id_or_imm(st, idx);
+            let addr = arr_base + al * idx_;
+            st.mem.insert(addr, val);
+            Val::Unit
         }
         FMovD(ref x) => st.env.get(x).expect("missing value").clone(),
         FNegD(ref x) => {
@@ -257,10 +268,10 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         FSubD(ref x, ref y) => float_binop(st, x, y, &|x, y| x - y),
         FMulD(ref x, ref y) => float_binop(st, x, y, &|x, y| x * y),
         FDivD(ref x, ref y) => float_binop(st, x, y, &|x, y| x / y),
-        LdDF(arr, idx, _al) => {
+        LdDF(_addr, _idx, _al) => {
             todo!()
         }
-        StDF(v, arr, idx, _al) => {
+        StDF(_val, _addr, _idx, _al) => {
             todo!()
         }
         Comment(_s) => Val::Unit,
@@ -295,15 +306,37 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
             cond_f(st, x, y, e1, e2, &|x, y| x > y)
         }
         CallCls(cls, int_args, float_args) => {
-            let f = st
-                .env
-                .get(cls)
-                .unwrap_or_else(|| panic!("missing value '{}'", cls.0))
-                .clone();
-            if let Val::Fun(ref f_) = f {
-                call_fun(st, f_, int_args, float_args)
+            let addr = get_int(st, cls);
+            let cls_val = st.mem.get(&addr).unwrap_or_else(|| {
+                panic!("Expected closure at address {} for {}", addr, cls.0)
+            });
+            if let Val::Label(ref f_lbl) = cls_val {
+                // get the fundef
+                let f_val = st
+                    .constants
+                    .get(f_lbl)
+                    .unwrap_or_else(|| {
+                        panic!("Missing closure function {}", f_lbl.0)
+                    })
+                    .clone();
+                if let Val::Fun(Callable::Interpret(ref fd)) = f_val {
+                    // add closure label to env
+                    let env_ =
+                        st.env.update(id::T(f_lbl.0.clone()), Val::Int(addr));
+                    let env_orig = st.env.clone(); // FIXME:
+                    st.env = env_;
+                    // call it
+                    let val = call_interpreted(st, fd, int_args, float_args);
+                    st.env = env_orig;
+                    val
+                } else {
+                    panic!("Expected function label for closure")
+                }
             } else {
-                panic!("Expected function value for `{}`", cls.0)
+                panic!(
+                    "Expected label for closure at address {} for {}",
+                    addr, cls.0
+                )
             }
         }
         CallDir(cls, int_args, float_args) => {
@@ -335,14 +368,13 @@ pub fn g(st: &mut State, e: &asm::T) -> Val {
     }
 }
 
-// return state as well?
-pub fn f(p: &asm::Prog) -> Val {
+pub fn f(p: &asm::Prog) -> (Val, State) {
     // FIXME: pass state around via Rc<>
     let asm::Prog::Prog(floats, fds, term) = p;
 
     let mut constants = std::collections::HashMap::<id::L, Val>::new();
     for (id, x) in floats {
-        constants.insert(id.clone(), Val::Float(x.clone()));
+        constants.insert(id.clone(), Val::Float(*x));
     }
 
     for f in fds {
@@ -358,16 +390,28 @@ pub fn f(p: &asm::Prog) -> Val {
         )),
     );
 
+    // FIXME: probably need special handling for lets with this....
+    // generated code looks like the lets update min_caml_hp
+    // rather than create a new binding...
+    //
+    // Initial heap pointer = 0
+    let env = im::hashmap::HashMap::unit(
+        id::T(String::from("min_caml_hp")),
+        Val::Int(0),
+    );
+
     let mut st = State {
-        constants: constants,
-        env: im::hashmap::HashMap::new(),
+        constants,
+        env,
+        mem: std::collections::HashMap::new(),
     };
-    g(&mut st, &term)
+    let res = g(&mut st, term);
+    (res, st)
 }
 
-fn builtin_min_caml_print_int(args: &Vec<Val>, fargs: &Vec<Val>) -> Val {
+fn builtin_min_caml_print_int(args: &[Val], _fargs: &[Val]) -> Val {
     //eprintln!("builtin_min_caml_print_int");
-    if args.len() > 0 {
+    if !args.is_empty() {
         if let Val::Int(x) = args[0] {
             println!("{}", x);
             Val::Unit
