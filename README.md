@@ -48,10 +48,10 @@ possible.
   * constant folding
   * unnecessary definition elimination
 * Closure Conversion - done
-* Code generation - in progress
+* Code generation - done
 * System library
-  * for reference interpreter
-* Reference interpreter
+  * for reference interpreter - in progress
+* Reference interpreter - in progress
 * REPL
   * for reference interpreter
 * Command line - in progress
