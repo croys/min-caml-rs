@@ -23,7 +23,7 @@ type BuiltinFn = Rc<dyn Fn(&mut State, &[Val], &[Val]) -> Val>;
 
 #[derive(Clone)]
 pub enum Callable {
-    Interpret(asm::FunDef),
+    Interpret(Rc<asm::FunDef>),
     Builtin(String, BuiltinFn),
 }
 
@@ -53,8 +53,8 @@ pub enum Val {
     Unit,
     Int(i32),
     Float(f64),
-    Array(Vec<Val>), // FIXME: necessary? we just hit memory directly
-    Tuple(Vec<Val>), // FIXME: necessary? we just hit memory directly
+    //Array(Vec<Val>), // FIXME: necessary? we just hit memory directly
+    //Tuple(Vec<Val>), // FIXME: necessary? we just hit memory directly
     Fun(Callable),
 }
 
@@ -418,7 +418,7 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
 
     for f in fds {
         labels.insert(f.name.clone(), addr);
-        mem.insert(addr, Val::Fun(Callable::Interpret(f.clone())));
+        mem.insert(addr, Val::Fun(Callable::Interpret(Rc::new(f.clone()))));
         addr += 4;
     }
 
