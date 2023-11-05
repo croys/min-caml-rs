@@ -61,7 +61,6 @@ pub enum Val {
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
     pub labels: std::collections::HashMap<id::L, i32>,
-    pub constants: std::collections::HashMap<id::L, Val>,
     pub env: im::hashmap::HashMap<id::T, Val>,
     pub mem: std::collections::HashMap<i32, Val>,
 }
@@ -226,13 +225,11 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
     match e {
         Nop => Val::Unit,
         Set(ref i) => Val::Int(*i),
-        SetL(ref l) => {
-            Val::Int(
-                *st.labels
-                    .get(l)
-                    .unwrap_or_else(|| panic!("Unknown label {}", l.0)),
-            )
-        }
+        SetL(ref l) => Val::Int(
+            *st.labels
+                .get(l)
+                .unwrap_or_else(|| panic!("Unknown label {}", l.0)),
+        ),
         Mov(ref x) => st
             .env
             .get(x)
@@ -339,14 +336,12 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
                 if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
                     // add closure label to env
                     let env_orig = st.env.clone();
-                    let env_ = st.env.update(
-                        id::T(fd.name.0.clone()),
-                        Val::Int(cls_addr),
-                    );
+                    let env_ = st
+                        .env
+                        .update(id::T(fd.name.0.clone()), Val::Int(cls_addr));
                     st.env = env_;
                     // call it
-                    let val =
-                        call_interpreted(st, fd, int_args, float_args);
+                    let val = call_interpreted(st, fd, int_args, float_args);
                     st.env = env_orig;
                     val
                 } else {
@@ -365,13 +360,21 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
             }
         }
         CallDir(cls, int_args, float_args) => {
-            let f = st
-                .constants
-                .get(cls)
-                .unwrap_or_else(|| panic!("missing value '{}'", cls.0))
-                .clone();
-            if let Val::Fun(ref f_) = f {
-                call_fun(st, f_, int_args, float_args)
+            let fn_addr = *st.labels.get(cls).unwrap_or_else(|| {
+                panic!("Unknown label for closure: {}", cls.0)
+            });
+            let fn_val = st
+                .mem
+                .get(&fn_addr)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Expected closure at address {} for {}",
+                        fn_addr, cls.0
+                    )
+                })
+                .clone(); // FIXME: Use Rc<RefCell<>>
+            if let Val::Fun(ref f) = fn_val {
+                call_fun(st, f, int_args, float_args)
             } else {
                 panic!("Expected function value for '{}'", cls.0)
             }
@@ -407,25 +410,16 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
     let mut mem = std::collections::HashMap::new();
     let mut labels = std::collections::HashMap::new();
 
-    // FIXME: remove below
-    let mut constants = std::collections::HashMap::<id::L, Val>::new();
-
     for (id, x) in floats {
         labels.insert(id.clone(), addr);
         mem.insert(addr, Val::Float(*x));
         addr += 8;
-
-        constants.insert(id.clone(), Val::Float(*x)); // FIXME: remove
     }
 
     for f in fds {
         labels.insert(f.name.clone(), addr);
         mem.insert(addr, Val::Fun(Callable::Interpret(f.clone())));
         addr += 4;
-
-        // FIXME: remove
-        constants
-            .insert(f.name.clone(), Val::Fun(Callable::Interpret(f.clone())));
     }
 
     let mut add_builtin = |name: &str, f: BuiltinFn| {
@@ -438,12 +432,6 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
             )),
         );
         addr += 4;
-
-        // FIXME: remove below
-        constants.insert(
-            id::L(String::from(name)),
-            Val::Fun(Callable::Builtin(String::from("builtin_") + name, f)),
-        );
     };
 
     add_builtin("min_caml_print_int", Rc::new(builtin_min_caml_print_int));
@@ -470,12 +458,7 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
 
     eprintln!("*** Memory\n{:?}\n", mem);
 
-    let mut st = State {
-        labels,
-        constants,
-        env,
-        mem,
-    };
+    let mut st = State { labels, env, mem };
     let res = g(&mut st, term);
     (res, st)
 }
