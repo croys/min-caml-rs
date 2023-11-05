@@ -496,22 +496,37 @@ fn builtin_min_caml_create_array(
         }
         Val::Int(addr)
     } else {
-        panic!("expected arguments [sz : Int, default: Int]")
+        panic!("expected arguments [sz : Int, default: Int] []")
     }
 }
 
 fn builtin_min_caml_create_float_array(
-    _st: &mut State,
-    _args: &[Val],
-    _fargs: &[Val],
+    st: &mut State,
+    args: &[Val],
+    fargs: &[Val],
 ) -> Val {
-    todo!()
+    // args are size, default value
+    if let (Val::Int(ref sz), Val::Float(ref def)) = (&args[0], &fargs[0]) {
+        let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
+        let addr = get_int(st, &min_caml_hp);
+        st.env = st.env.update(min_caml_hp, Val::Int(addr + 8 * sz));
+        for n in 0..*sz {
+            st.mem.insert(addr + 8 * n, Val::Float(*def));
+        }
+        Val::Int(addr)
+    } else {
+        panic!("expected arguments [sz : Int] [default: Float]")
+    }
 }
 
 fn builtin_min_caml_truncate(
     _st: &mut State,
     _args: &[Val],
-    _fargs: &[Val],
+    fargs: &[Val],
 ) -> Val {
-    todo!()
+    if let Val::Float(ref x) = &fargs[0] {
+        Val::Int(*x as i32)
+    } else {
+        panic!("expected arguments [] [x : Float]")
+    }
 }
