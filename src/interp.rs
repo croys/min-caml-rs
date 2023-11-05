@@ -56,7 +56,6 @@ pub enum Val {
     Array(Vec<Val>), // FIXME: necessary? we just hit memory directly
     Tuple(Vec<Val>), // FIXME: necessary? we just hit memory directly
     Fun(Callable),
-    Label(id::L),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -228,8 +227,6 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         Nop => Val::Unit,
         Set(ref i) => Val::Int(*i),
         SetL(ref l) => {
-            // FIXME: return address of label
-            // Val::Label(l.clone())
             Val::Int(
                 *st.labels
                     .get(l)
@@ -278,17 +275,6 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         FMulD(ref x, ref y) => float_binop(st, x, y, &|x, y| x * y),
         FDivD(ref x, ref y) => float_binop(st, x, y, &|x, y| x / y),
         LdDF(arr, idx, al) => {
-            // FIXME: this breaks for constants...
-            // SetL will put in the label, not it's address....
-            //
-            // Either:
-            // 1) special case all uses of addresses to check labels
-            // 2) create memory addresses for all constants
-            //
-            // 2) seems better...
-            // allocate memory address for each constant, and have
-            // constants map map from id::L to address
-            // will also work for closures...
             let arr_base = get_int(st, arr);
             let idx_ = id_or_imm(st, idx);
             let addr = arr_base + al * idx_;
@@ -332,87 +318,50 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
             cond_f(st, x, y, e1, e2, &|x, y| x > y)
         }
         CallCls(cls, int_args, float_args) => {
-            if false {
-                let addr = get_int(st, cls);
-                let cls_val = st.mem.get(&addr).unwrap_or_else(|| {
-                    panic!("Expected closure at address {} for {}", addr, cls.0)
-                });
-                if let Val::Label(ref f_lbl) = cls_val {
-                    // get the fundef
-                    let f_val = st
-                        .constants
-                        .get(f_lbl)
-                        .unwrap_or_else(|| {
-                            panic!("Missing closure function {}", f_lbl.0)
-                        })
-                        .clone();
-                    if let Val::Fun(Callable::Interpret(ref fd)) = f_val {
-                        // add closure label to env
-                        let env_orig = st.env.clone();
-                        let env_ = st
-                            .env
-                            .update(id::T(f_lbl.0.clone()), Val::Int(addr));
-                        st.env = env_;
-                        // call it
-                        let val =
-                            call_interpreted(st, fd, int_args, float_args);
-                        st.env = env_orig;
-                        val
-                    } else {
-                        panic!("Expected function label for closure")
-                    }
+            let cls_addr = get_int(st, cls);
+            let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
+                panic!(
+                    "No address of function in closure {} at {}",
+                    cls.0, cls_addr
+                )
+            });
+            if let Val::Int(fn_addr) = fn_val {
+                let fn_val = st
+                    .mem
+                    .get(fn_addr)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Expected closure at address {} for {}",
+                            cls_addr, cls.0
+                        )
+                    })
+                    .clone();
+                if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
+                    // add closure label to env
+                    let env_orig = st.env.clone();
+                    let env_ = st.env.update(
+                        id::T(fd.name.0.clone()),
+                        Val::Int(cls_addr),
+                    );
+                    st.env = env_;
+                    // call it
+                    let val =
+                        call_interpreted(st, fd, int_args, float_args);
+                    st.env = env_orig;
+                    val
                 } else {
+                    // FIXME: reverse map for labels?
                     panic!(
-                        "Expected label for closure at address {} for {}",
-                        addr, cls.0
+                        "Expected function for closure at {}, got {:?}",
+                        cls_addr, fn_val,
                     )
                 }
             } else {
-                let cls_addr = get_int(st, cls);
-                let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
-                    panic!(
-                        "No address of function in closure {} at {}",
-                        cls.0, cls_addr
-                    )
-                });
-                if let Val::Int(fn_addr) = fn_val {
-                    let fn_val = st
-                        .mem
-                        .get(fn_addr)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "Expected closure at address {} for {}",
-                                cls_addr, cls.0
-                            )
-                        })
-                        .clone();
-                    if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
-                        // add closure label to env
-                        let env_orig = st.env.clone();
-                        let env_ = st.env.update(
-                            id::T(fd.name.0.clone()),
-                            Val::Int(cls_addr),
-                        );
-                        st.env = env_;
-                        // call it
-                        let val =
-                            call_interpreted(st, fd, int_args, float_args);
-                        st.env = env_orig;
-                        val
-                    } else {
-                        // FIXME: reverse map for labels?
-                        panic!(
-                            "Expected function for closure at {}, got {:?}",
-                            cls_addr, fn_val,
-                        )
-                    }
-                } else {
-                    panic!(
-                        "Expected address of function for closure \
-                         {} at {}, got {:?}",
-                        cls.0, cls_addr, fn_val
-                    )
-                }
+                panic!(
+                    "Expected address of function for closure \
+                        {} at {}, got {:?}",
+                    cls.0, cls_addr, fn_val
+                )
             }
         }
         CallDir(cls, int_args, float_args) => {
@@ -447,11 +396,6 @@ pub fn g(st: &mut State, e: &asm::T) -> Val {
 pub fn f(p: &asm::Prog) -> (Val, State) {
     // FIXME: pass state around via Rc<>
     let asm::Prog::Prog(floats, fds, term) = p;
-
-    // FIXME: put all constants into memory
-    // keep id::L -> address map
-    //
-    // min_caml_hp should then start after this
 
     // As we are interpreting the intermediate instructions at a fairly low
     // level, we need to keep track of memory addresses
@@ -512,38 +456,6 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
         Rc::new(builtin_min_caml_create_float_array),
     );
     add_builtin("min_caml_truncate", Rc::new(builtin_min_caml_truncate));
-
-    // constants.insert(
-    //     id::L(String::from("min_caml_print_int")),
-    //     Val::Fun(Callable::Builtin(
-    //         String::from("builtin_min_caml_print_int"),
-    //         Rc::new(builtin_min_caml_print_int),
-    //     )),
-    // );
-
-    // constants.insert(
-    //     id::L(String::from("min_caml_create_array")),
-    //     Val::Fun(Callable::Builtin(
-    //         String::from("builtin_min_caml_create_array"),
-    //         Rc::new(builtin_min_caml_create_array),
-    //     )),
-    // );
-
-    // constants.insert(
-    //     id::L(String::from("min_caml_create_float_array")),
-    //     Val::Fun(Callable::Builtin(
-    //         String::from("builtin_min_caml_create_float_array"),
-    //         Rc::new(builtin_min_caml_create_float_array),
-    //     )),
-    // );
-
-    // constants.insert(
-    //     id::L(String::from("min_caml_truncate")),
-    //     Val::Fun(Callable::Builtin(
-    //         String::from("builtin_min_caml_truncate"),
-    //         Rc::new(builtin_min_caml_truncate),
-    //     )),
-    // );
 
     // FIXME: probably need special handling for lets with this....
     // generated code looks like the lets update min_caml_hp
