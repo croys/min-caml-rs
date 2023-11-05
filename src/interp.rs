@@ -19,7 +19,7 @@ use crate::id;
 use std::fmt::Formatter;
 use std::rc::Rc;
 
-type BuiltinFn = Rc<dyn Fn(&[Val], &[Val]) -> Val>;
+type BuiltinFn = Rc<dyn Fn(&mut State, &[Val], &[Val]) -> Val>;
 
 #[derive(Clone)]
 pub enum Callable {
@@ -32,7 +32,7 @@ impl std::fmt::Debug for Callable {
         use Callable::*;
         match self {
             Interpret(ref fd) => write!(f, "Interpret({:?})", fd),
-            Builtin(ref b, _) => write!(f, "Builtin({:?})", b),
+            Builtin(ref b, _) => write!(f, "Builtin({:?}, <function>)", b),
         }
     }
 }
@@ -61,20 +61,21 @@ pub enum Val {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
+    pub labels: std::collections::HashMap<id::L, i32>,
     pub constants: std::collections::HashMap<id::L, Val>,
     pub env: im::hashmap::HashMap<id::T, Val>,
     pub mem: std::collections::HashMap<i32, Val>,
 }
 
 fn get_int(st: &State, x: &id::T) -> i32 {
-    if let Val::Int(x1) = st
+    let v = st
         .env
         .get(x)
-        .unwrap_or_else(|| panic!("missing value: {}", x.0))
-    {
+        .unwrap_or_else(|| panic!("missing value: {}", x.0));
+    if let Val::Int(x1) = v {
         *x1
     } else {
-        panic!("expected int")
+        panic!("expected int, got {:?}", v)
     }
 }
 
@@ -202,7 +203,7 @@ fn call_builtin(
         //eprintln!("  farg: {:?}", val);
         fargs_.push(val.clone())
     }
-    (*f)(&args_, &fargs_)
+    (*f)(st, &args_, &fargs_)
 }
 
 fn call_fun(
@@ -226,7 +227,15 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
     match e {
         Nop => Val::Unit,
         Set(ref i) => Val::Int(*i),
-        SetL(ref l) => Val::Label(l.clone()),
+        SetL(ref l) => {
+            // FIXME: return address of label
+            // Val::Label(l.clone())
+            Val::Int(
+                *st.labels
+                    .get(l)
+                    .unwrap_or_else(|| panic!("Unknown label {}", l.0)),
+            )
+        }
         Mov(ref x) => st
             .env
             .get(x)
@@ -268,8 +277,25 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         FSubD(ref x, ref y) => float_binop(st, x, y, &|x, y| x - y),
         FMulD(ref x, ref y) => float_binop(st, x, y, &|x, y| x * y),
         FDivD(ref x, ref y) => float_binop(st, x, y, &|x, y| x / y),
-        LdDF(_addr, _idx, _al) => {
-            todo!()
+        LdDF(arr, idx, al) => {
+            // FIXME: this breaks for constants...
+            // SetL will put in the label, not it's address....
+            //
+            // Either:
+            // 1) special case all uses of addresses to check labels
+            // 2) create memory addresses for all constants
+            //
+            // 2) seems better...
+            // allocate memory address for each constant, and have
+            // constants map map from id::L to address
+            // will also work for closures...
+            let arr_base = get_int(st, arr);
+            let idx_ = id_or_imm(st, idx);
+            let addr = arr_base + al * idx_;
+            st.mem
+                .get(&addr)
+                .unwrap_or_else(|| panic!("missing value at address: {}", addr))
+                .clone()
         }
         StDF(_val, _addr, _idx, _al) => {
             todo!()
@@ -306,37 +332,87 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
             cond_f(st, x, y, e1, e2, &|x, y| x > y)
         }
         CallCls(cls, int_args, float_args) => {
-            let addr = get_int(st, cls);
-            let cls_val = st.mem.get(&addr).unwrap_or_else(|| {
-                panic!("Expected closure at address {} for {}", addr, cls.0)
-            });
-            if let Val::Label(ref f_lbl) = cls_val {
-                // get the fundef
-                let f_val = st
-                    .constants
-                    .get(f_lbl)
-                    .unwrap_or_else(|| {
-                        panic!("Missing closure function {}", f_lbl.0)
-                    })
-                    .clone();
-                if let Val::Fun(Callable::Interpret(ref fd)) = f_val {
-                    // add closure label to env
-                    let env_ =
-                        st.env.update(id::T(f_lbl.0.clone()), Val::Int(addr));
-                    let env_orig = st.env.clone(); // FIXME:
-                    st.env = env_;
-                    // call it
-                    let val = call_interpreted(st, fd, int_args, float_args);
-                    st.env = env_orig;
-                    val
+            if false {
+                let addr = get_int(st, cls);
+                let cls_val = st.mem.get(&addr).unwrap_or_else(|| {
+                    panic!("Expected closure at address {} for {}", addr, cls.0)
+                });
+                if let Val::Label(ref f_lbl) = cls_val {
+                    // get the fundef
+                    let f_val = st
+                        .constants
+                        .get(f_lbl)
+                        .unwrap_or_else(|| {
+                            panic!("Missing closure function {}", f_lbl.0)
+                        })
+                        .clone();
+                    if let Val::Fun(Callable::Interpret(ref fd)) = f_val {
+                        // add closure label to env
+                        let env_orig = st.env.clone();
+                        let env_ = st
+                            .env
+                            .update(id::T(f_lbl.0.clone()), Val::Int(addr));
+                        st.env = env_;
+                        // call it
+                        let val =
+                            call_interpreted(st, fd, int_args, float_args);
+                        st.env = env_orig;
+                        val
+                    } else {
+                        panic!("Expected function label for closure")
+                    }
                 } else {
-                    panic!("Expected function label for closure")
+                    panic!(
+                        "Expected label for closure at address {} for {}",
+                        addr, cls.0
+                    )
                 }
             } else {
-                panic!(
-                    "Expected label for closure at address {} for {}",
-                    addr, cls.0
-                )
+                let cls_addr = get_int(st, cls);
+                let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
+                    panic!(
+                        "No address of function in closure {} at {}",
+                        cls.0, cls_addr
+                    )
+                });
+                if let Val::Int(fn_addr) = fn_val {
+                    let fn_val = st
+                        .mem
+                        .get(fn_addr)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Expected closure at address {} for {}",
+                                cls_addr, cls.0
+                            )
+                        })
+                        .clone();
+                    if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
+                        // add closure label to env
+                        let env_orig = st.env.clone();
+                        let env_ = st.env.update(
+                            id::T(fd.name.0.clone()),
+                            Val::Int(cls_addr),
+                        );
+                        st.env = env_;
+                        // call it
+                        let val =
+                            call_interpreted(st, fd, int_args, float_args);
+                        st.env = env_orig;
+                        val
+                    } else {
+                        // FIXME: reverse map for labels?
+                        panic!(
+                            "Expected function for closure at {}, got {:?}",
+                            cls_addr, fn_val,
+                        )
+                    }
+                } else {
+                    panic!(
+                        "Expected address of function for closure \
+                         {} at {}, got {:?}",
+                        cls.0, cls_addr, fn_val
+                    )
+                }
             }
         }
         CallDir(cls, int_args, float_args) => {
@@ -372,44 +448,131 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
     // FIXME: pass state around via Rc<>
     let asm::Prog::Prog(floats, fds, term) = p;
 
+    // FIXME: put all constants into memory
+    // keep id::L -> address map
+    //
+    // min_caml_hp should then start after this
+
+    // As we are interpreting the intermediate instructions at a fairly low
+    // level, we need to keep track of memory addresses
+    //
+    // All constants are allocated space in memory and an entry in the label
+    // to address map
+    //
+    let mut addr: i32 = 0;
+    let mut mem = std::collections::HashMap::new();
+    let mut labels = std::collections::HashMap::new();
+
+    // FIXME: remove below
     let mut constants = std::collections::HashMap::<id::L, Val>::new();
+
     for (id, x) in floats {
-        constants.insert(id.clone(), Val::Float(*x));
+        labels.insert(id.clone(), addr);
+        mem.insert(addr, Val::Float(*x));
+        addr += 8;
+
+        constants.insert(id.clone(), Val::Float(*x)); // FIXME: remove
     }
 
     for f in fds {
+        labels.insert(f.name.clone(), addr);
+        mem.insert(addr, Val::Fun(Callable::Interpret(f.clone())));
+        addr += 4;
+
+        // FIXME: remove
         constants
             .insert(f.name.clone(), Val::Fun(Callable::Interpret(f.clone())));
     }
 
-    constants.insert(
-        id::L(String::from("min_caml_print_int")),
-        Val::Fun(Callable::Builtin(
-            String::from("builtin_min_caml_print_int"),
-            Rc::new(builtin_min_caml_print_int),
-        )),
+    let mut add_builtin = |name: &str, f: BuiltinFn| {
+        labels.insert(id::L(String::from(name)), addr);
+        mem.insert(
+            addr,
+            Val::Fun(Callable::Builtin(
+                String::from("builtin_") + name,
+                f.clone(),
+            )),
+        );
+        addr += 4;
+
+        // FIXME: remove below
+        constants.insert(
+            id::L(String::from(name)),
+            Val::Fun(Callable::Builtin(String::from("builtin_") + name, f)),
+        );
+    };
+
+    add_builtin("min_caml_print_int", Rc::new(builtin_min_caml_print_int));
+    add_builtin(
+        "min_caml_create_array",
+        Rc::new(builtin_min_caml_create_array),
     );
+    add_builtin(
+        "min_caml_create_float_array",
+        Rc::new(builtin_min_caml_create_float_array),
+    );
+    add_builtin("min_caml_truncate", Rc::new(builtin_min_caml_truncate));
+
+    // constants.insert(
+    //     id::L(String::from("min_caml_print_int")),
+    //     Val::Fun(Callable::Builtin(
+    //         String::from("builtin_min_caml_print_int"),
+    //         Rc::new(builtin_min_caml_print_int),
+    //     )),
+    // );
+
+    // constants.insert(
+    //     id::L(String::from("min_caml_create_array")),
+    //     Val::Fun(Callable::Builtin(
+    //         String::from("builtin_min_caml_create_array"),
+    //         Rc::new(builtin_min_caml_create_array),
+    //     )),
+    // );
+
+    // constants.insert(
+    //     id::L(String::from("min_caml_create_float_array")),
+    //     Val::Fun(Callable::Builtin(
+    //         String::from("builtin_min_caml_create_float_array"),
+    //         Rc::new(builtin_min_caml_create_float_array),
+    //     )),
+    // );
+
+    // constants.insert(
+    //     id::L(String::from("min_caml_truncate")),
+    //     Val::Fun(Callable::Builtin(
+    //         String::from("builtin_min_caml_truncate"),
+    //         Rc::new(builtin_min_caml_truncate),
+    //     )),
+    // );
 
     // FIXME: probably need special handling for lets with this....
     // generated code looks like the lets update min_caml_hp
     // rather than create a new binding...
     //
-    // Initial heap pointer = 0
+    // Initial heap pointer
     let env = im::hashmap::HashMap::unit(
         id::T(String::from("min_caml_hp")),
-        Val::Int(0),
+        Val::Int(addr),
     );
+    //addr += 4;
+
+    eprintln!("*** Memory\n{:?}\n", mem);
 
     let mut st = State {
+        labels,
         constants,
         env,
-        mem: std::collections::HashMap::new(),
+        mem,
     };
     let res = g(&mut st, term);
     (res, st)
 }
 
-fn builtin_min_caml_print_int(args: &[Val], _fargs: &[Val]) -> Val {
+fn builtin_min_caml_print_int(
+    _st: &mut State,
+    args: &[Val],
+    _fargs: &[Val],
+) -> Val {
     //eprintln!("builtin_min_caml_print_int");
     if !args.is_empty() {
         if let Val::Int(x) = args[0] {
@@ -421,4 +584,39 @@ fn builtin_min_caml_print_int(args: &[Val], _fargs: &[Val]) -> Val {
     } else {
         panic!("Missing argument")
     }
+}
+
+fn builtin_min_caml_create_array(
+    st: &mut State,
+    args: &[Val],
+    _fargs: &[Val],
+) -> Val {
+    // args are size, default value
+    if let (Val::Int(ref sz), Val::Int(ref def)) = (&args[0], &args[1]) {
+        let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
+        let addr = get_int(st, &min_caml_hp);
+        st.env = st.env.update(min_caml_hp, Val::Int(addr + 4 * sz));
+        for n in 0..*sz {
+            st.mem.insert(addr + 4 * n, Val::Int(*def));
+        }
+        Val::Int(addr)
+    } else {
+        panic!("expected arguments [sz : Int, default: Int]")
+    }
+}
+
+fn builtin_min_caml_create_float_array(
+    _st: &mut State,
+    _args: &[Val],
+    _fargs: &[Val],
+) -> Val {
+    todo!()
+}
+
+fn builtin_min_caml_truncate(
+    _st: &mut State,
+    _args: &[Val],
+    _fargs: &[Val],
+) -> Val {
+    todo!()
 }
