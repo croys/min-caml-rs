@@ -246,15 +246,24 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         /* 組の生成 (caml2html: virtual_tuple) */
         {
             let y = id::genid(&id::T(String::from("t")));
+            let xts = xs
+                .iter()
+                .map(|x| {
+                    (
+                        x.clone(),
+                        env.get(x)
+                            .unwrap_or_else(|| panic!("no type for {}", x.0))
+                            .clone(),
+                    )
+                })
+                .collect();
             let (offset, store) = expand(
-                xs.iter()
-                    .map(|x| (x.clone(), env.get(x).expect("no type").clone()))
-                    .collect(),
+                xts,
                 (0, Ans(Mov(y.clone()))),
-                &|ref x, ref offset, ref store| {
+                &|x, ref offset, ref store| {
                     asm::seq(&StDF(x.clone(), y.clone(), C(*offset), 1), store)
                 },
-                &|ref x, _, ref offset, ref store| {
+                &|x, _, ref offset, ref store| {
                     asm::seq(&St(x.clone(), y.clone(), C(*offset), 1), store)
                 },
             );

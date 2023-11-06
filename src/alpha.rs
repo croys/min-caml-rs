@@ -57,59 +57,57 @@ fn g(env: &im::HashMap<Id, Id>, e: &KNormal) -> KNormal {
         IfGe(x, y, e1, e2) => {
             IfGe(find(x, env), find(y, env), bg(env, e1), bg(env, e2))
         }
-        Let((ref x, ref t), e1, e2) => {
+        Let((ref x, ref t), ref e1, ref e2) => {
             // letのα変換
             // - α-conversion for let
             let x_ = id::genid(x);
             eprintln!("Let: {:?} -> {:?}", x, x_);
-            Let(
-                (x_.clone(), t.clone()),
-                bg(env, e1),
-                bg(&env.update(x.clone(), x_), e2),
-            )
+            let mut env_ = env.clone();
+            env_.insert(x.clone(), x_.clone());
+            Let((x_, t.clone()), bg(env, e1), bg(&env_, e2))
         }
         Var(x) => Var(find(x, env)),
         LetRec(
             k_normal::FunDef {
-                name: (x, t),
-                args: yts,
-                body: e1,
+                name: (ref x, ref t),
+                args: ref yts,
+                body: ref e1,
             },
-            e2,
+            ref e2,
         ) => {
             // let recのα変換
             // - α-conversion for let-rec
-            let env = env.update(x.clone(), id::genid(x));
-            let mut env_ = env.clone();
+            let env0 = env.update(x.clone(), id::genid(x));
+            let mut env1 = env0.clone();
             for (y, _t) in yts {
-                env_.insert(y.clone(), id::genid(y));
+                env1.insert(y.clone(), id::genid(y));
             }
             LetRec(
                 k_normal::FunDef {
-                    name: (find(x, &env), t.clone()),
+                    name: (find(x, &env0), t.clone()),
                     args: yts
                         .iter()
-                        .map(|(y, t)| (find(y, &env_), t.clone()))
+                        .map(|(y, t)| (find(y, &env1), t.clone()))
                         .collect(),
-                    body: bg(&env_, e1),
+                    body: bg(&env1, e1),
                 },
-                bg(&env, e2),
+                bg(&env0, e2),
             )
         }
         App(x, ys) => {
             App(find(x, env), ys.iter().map(|y| find(y, env)).collect())
         }
         Tuple(xs) => Tuple(xs.iter().map(|x| find(x, env)).collect()),
-        LetTuple(xts, y, e) => {
+        LetTuple(ref xts, ref y, ref e) => {
             // LetTupleのα変換
             // - α-conversion for LetTuple
             let mut env_ = env.clone();
-            for (x, _t) in xts {
+            for (ref x, _t) in xts {
                 env_.insert(x.clone(), id::genid(x));
             }
             LetTuple(
                 xts.iter()
-                    .map(|(x, t)| (find(x, &env_), t.clone()))
+                    .map(|(ref x, ref t)| (find(x, &env_), t.clone()))
                     .collect(),
                 find(y, env),
                 bg(&env_, e),
