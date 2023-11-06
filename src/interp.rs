@@ -78,10 +78,14 @@ fn get_int(st: &State, x: &id::T) -> i32 {
 }
 
 fn get_float(st: &State, x: &id::T) -> f64 {
-    if let Val::Float(x1) = st.env.get(x).expect("missing value") {
+    let v = st
+        .env
+        .get(x)
+        .unwrap_or_else(|| panic!("missing value: {}", x.0));
+    if let Val::Float(x1) = v {
         *x1
     } else {
-        panic!("expected float")
+        panic!("expected float, got {:?}", v)
     }
 }
 
@@ -309,7 +313,7 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         }
         Add(ref x, ref y) => int_binop(st, x, y, &|x, y| x + y),
         Sub(ref x, ref y) => int_binop(st, x, y, &|x, y| x - y),
-        Ld(arr, idx, al) => {
+        Ld(ref arr, ref idx, ref al) => {
             let arr_base = get_int(st, arr);
             let idx_ = id_or_imm(st, idx);
             let addr = arr_base + al * idx_;
@@ -318,7 +322,7 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
                 .unwrap_or_else(|| panic!("missing value at address: {}", addr))
                 .clone()
         }
-        St(x, arr, idx, al) => {
+        St(ref x, ref arr, ref idx, ref al) => {
             let val = st
                 .env
                 .get(x)
@@ -339,7 +343,7 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         FSubD(ref x, ref y) => float_binop(st, x, y, &|x, y| x - y),
         FMulD(ref x, ref y) => float_binop(st, x, y, &|x, y| x * y),
         FDivD(ref x, ref y) => float_binop(st, x, y, &|x, y| x / y),
-        LdDF(arr, idx, al) => {
+        LdDF(ref arr, ref idx, ref al) => {
             let arr_base = get_int(st, arr);
             let idx_ = id_or_imm(st, idx);
             let addr = arr_base + al * idx_;
@@ -348,8 +352,18 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
                 .unwrap_or_else(|| panic!("missing value at address: {}", addr))
                 .clone()
         }
-        StDF(_val, _addr, _idx, _al) => {
-            todo!()
+        StDF(ref x, ref arr, ref idx, ref al) => {
+            // let val = st
+            //     .env
+            //     .get(x)
+            //     .unwrap_or_else(|| panic!("missing value '{}'", x.0))
+            //     .clone();
+            let val = get_float(st, x);
+            let arr_base = get_int(st, arr);
+            let idx_ = id_or_imm(st, idx);
+            let addr = arr_base + al * idx_;
+            st.mem.insert(addr, Val::Float(val));
+            Val::Unit
         }
         Comment(_s) => Val::Unit,
         IfEq(ref x, ref y, ref e1, ref e2) => {
