@@ -268,7 +268,7 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
             match extenv.get(x) {
                 Some(t @ Type::Array(_)) => (ExtArray(x.clone()), t.clone()),
                 _ => panic!(
-                    "external variable {:?} does not have an aray type",
+                    "external variable {:?} does not have an array type",
                     x
                 ),
             }
