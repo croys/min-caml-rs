@@ -397,32 +397,38 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> (T, Type) {
                 }
             }
         }
-        S::Tuple(es) => {
+        S::Tuple(ref es) => {
             // FIXME: merge with normalize_app?
-
             // normalize components
-            let nes = es.iter().map(|e| {
-                let (e_, e_t) = g(env, e);
-                match e_ {
-                    Var(ref x) => (x.clone(), e_, e_t),
-                    _ => {
-                        let x = id::gentmp(&e_t);
-                        (x, e_, e_t)
+            let nes: Vec<(id::T, T, Type)> = es
+                .iter()
+                .map(|e| {
+                    let (e_, e_t) = g(env, e);
+                    match e_ {
+                        Var(ref x) => (x.clone(), e_, e_t),
+                        _ => {
+                            let x = id::gentmp(&e_t);
+                            (x, e_, e_t)
+                        }
                     }
-                }
-            });
+                })
+                .collect();
 
             // base expression is tuple construction
-            let res0 = Tuple(nes.clone().map(|(x, _, _)| x).collect());
-            let res_t = Type::Tuple(nes.clone().map(|(_, _, t)| t).collect());
+            let res0 =
+                Tuple(nes.iter().map(|(ref x, _, _)| x.clone()).collect());
+            let res_t = Type::Tuple(
+                nes.iter().map(|(_, _, ref t)| t.clone()).collect(),
+            );
 
-            let mut res = res0;
-            for (id, e, t) in nes.rev() {
+            // add necessary nested lets for fresh ids
+            let mut res = res0.clone();
+            for (ref id, ref e, ref t) in nes.iter().rev() {
                 if let Var(_x) = e {
                     // no need for let
                 } else {
                     // insert let
-                    res = Let((id, t), b(e), b(res));
+                    res = Let((id.clone(), t.clone()), b(e.clone()), b(res));
                 }
             }
             (res, res_t)
