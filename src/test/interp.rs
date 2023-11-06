@@ -18,17 +18,14 @@ fn test_f() {
         // FIXME: WIP - ignore these tests for now
         if true {
             let ignore_tests = [
-                // mismatched values
+                // missing built-in
                 "matmul.ml",
                 "matmul-flat.ml",
-                // stack overflow
-                "funcomp.ml",
-                // missing built-in
                 "cls-reg-bug.ml",
                 "float.ml",
                 // long-running
-                "ack.ml",
-                "fib.ml",
+                "ack.ml", // FIXME: now broken due to temporary "fix"
+                "fib.ml", // FIXME: now broken due to temporary "fix"
             ];
             if ignore_tests.iter().any(|t| path.ends_with(t)) {
                 continue;

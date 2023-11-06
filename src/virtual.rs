@@ -188,6 +188,8 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         /* Closureのアドレスをセットしてから、自由変数の値をストア */
         {
             let e2_ = g(&env.update(x.clone(), t.clone()), e2);
+            // let env_ = env.clone().update(x.clone(), t.clone());
+            // let e2_ = g(&env_, e2);
             let yts: Vec<(id::T, Type)> = ys
                 .iter()
                 .map(|y| {
@@ -198,14 +200,14 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             let (offset, store_fv) = expand(
                 yts,
                 (4, e2_),
-                &|y, offset, store_fv| {
+                &|ref y, ref offset, ref store_fv| {
                     asm::seq(
-                        &StDF(y.clone(), x.clone(), C(offset), 1),
+                        &StDF(y.clone(), x.clone(), C(*offset), 1),
                         &store_fv,
                     )
                 },
-                &|y, _, offset, store_fv| {
-                    asm::seq(&St(y.clone(), x.clone(), C(offset), 1), &store_fv)
+                &|ref y, _, ref offset, ref store_fv| {
+                    asm::seq(&St(y.clone(), x.clone(), C(*offset), 1), &store_fv)
                 },
             );
             let z = id::genid(&id::T(String::from("l")));

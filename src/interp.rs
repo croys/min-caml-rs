@@ -158,8 +158,8 @@ fn call_interpreted(
     args: &[id::T],
     float_args: &[id::T],
 ) -> Val {
-    //eprintln!("Applying {}", f.name.0);
-    let env_orig = st.env.clone();
+    // eprintln!("call_intepreted: {}", f.name.0);
+    let env_orig = st.env.clone(); // FIXME: env.enter
     if args.len() != f.args.len() {
         panic!("Mismatch between supplied arguments and function signature");
     }
@@ -171,15 +171,16 @@ fn call_interpreted(
     for (name, val) in std::iter::zip(f.args.iter(), args.iter()) {
         let val = env_orig.get(val).expect("missing value");
         st.env.insert(name.clone(), val.clone());
-        //eprintln!("  arg: {:?}", val);
+        // eprintln!("  arg: {:?}", val);
     }
     for (name, val) in std::iter::zip(f.fargs.iter(), float_args.iter()) {
         let val = env_orig.get(val).expect("missing value");
         st.env.insert(name.clone(), val.clone());
-        //eprintln!("  farg: {:?}", val);
+        // eprintln!("  farg: {:?}", val);
     }
     let res = g(st, &f.body);
-    st.env = env_orig;
+    // FIXME: env.leave
+    //st.env = env_orig;
     res
 }
 
@@ -228,7 +229,9 @@ fn call_cls(
     int_args: &[id::T],
     float_args: &[id::T],
 ) -> Val {
+    // eprintln!("call_cls: {}", cls.0);
     let cls_addr = get_int(st, cls);
+    // eprintln!("        addr: {}", cls_addr);
     let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
         panic!(
             "No address of function in closure {} at {}",
@@ -236,6 +239,7 @@ fn call_cls(
         )
     });
     if let Val::Int(fn_addr) = fn_val {
+        // eprintln!("        fun addr: {}", fn_addr);
         let fn_val = st
             .mem
             .get(fn_addr)
@@ -244,13 +248,14 @@ fn call_cls(
             })
             .clone();
         if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
+            // eprintln!("        fun name: {}", fd.name.0);
             // add closure label to env
-            let env_orig = st.env.clone();
+            //let env_orig = st.env.clone();
             st.env.insert(id::T(fd.name.0.clone()), Val::Int(cls_addr));
             // FIXME: precompute and store the id::T above
             // call it
             let val = call_interpreted(st, fd, int_args, float_args);
-            st.env = env_orig;
+            //st.env = env_orig;
             val
         } else {
             // FIXME: reverse map for labels?
@@ -277,14 +282,14 @@ fn call_dir(
     let fn_addr = *st
         .labels
         .get(cls)
-        .unwrap_or_else(|| panic!("Unknown label for closure: {}", cls.0));
+        .unwrap_or_else(|| panic!("Unknown label for direct call: {}", cls.0));
     let fn_val = st
         .mem
         .get(&fn_addr)
         .unwrap_or_else(|| {
-            panic!("Expected closure at address {} for {}", fn_addr, cls.0)
+            panic!("Expected function at address {} for {}", fn_addr, cls.0)
         })
-        .clone(); // FIXME: Use Rc<RefCell<>>
+        .clone();
     if let Val::Fun(ref f) = fn_val {
         call_fun(st, f, int_args, float_args)
     } else {
