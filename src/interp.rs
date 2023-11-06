@@ -58,10 +58,64 @@ pub enum Val {
     Fun(Callable),
 }
 
+type M = im::hashmap::HashMap<id::T, Val>;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Env {
+    pub globals: std::collections::HashMap<id::T, Val>,
+    pub locals: M,
+}
+
+impl Env {
+    pub fn enter(&mut self) -> M {
+        let mut m = self.locals.clone();
+        std::mem::swap(&mut m, &mut self.locals);
+        m
+    }
+
+    pub fn leave_(&mut self, m: &mut M) {
+        std::mem::swap(m, &mut self.locals);
+    }
+
+    pub fn leave(&mut self, m: M) {
+        self.locals = m
+    }
+
+    pub fn set(&mut self, x: &id::T, v: &Val) {
+        if self.globals.contains_key(x) {
+            self.globals.insert(x.clone(), v.clone());
+        } else {
+            self.locals.insert(x.clone(), v.clone());
+        }
+    }
+
+    pub fn get(&self, x: &id::T) -> Option<&Val> {
+        if let Some(v) = self.globals.get(x) {
+            Some(v)
+        } else {
+            self.locals.get(x)
+        }
+    }
+
+    pub fn get_(&self, x: &id::T) -> &Val {
+        if let Some(v) = self.globals.get(x) {
+            v
+        } else if let Some(v) = self.locals.get(x) {
+            v
+        } else {
+            panic!("No value for {}", x.0)
+        }
+    }
+
+    pub fn set_global(&mut self, x: &id::T, v: &Val) {
+        self.globals.insert(x.clone(), v.clone());
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct State {
     pub labels: std::collections::HashMap<id::L, i32>,
-    pub env: im::hashmap::HashMap<id::T, Val>,
+    pub env: Env,
     pub mem: std::collections::HashMap<i32, Val>,
 }
 
@@ -159,7 +213,7 @@ fn call_interpreted(
     float_args: &[id::T],
 ) -> Val {
     // eprintln!("call_intepreted: {}", f.name.0);
-    let env_orig = st.env.clone(); // FIXME: env.enter
+    let env_orig = st.env.enter();
     if args.len() != f.args.len() {
         panic!("Mismatch between supplied arguments and function signature");
     }
@@ -170,17 +224,16 @@ fn call_interpreted(
     }
     for (name, val) in std::iter::zip(f.args.iter(), args.iter()) {
         let val = env_orig.get(val).expect("missing value");
-        st.env.insert(name.clone(), val.clone());
+        st.env.set(name, val);
         // eprintln!("  arg: {:?}", val);
     }
     for (name, val) in std::iter::zip(f.fargs.iter(), float_args.iter()) {
         let val = env_orig.get(val).expect("missing value");
-        st.env.insert(name.clone(), val.clone());
+        st.env.set(name, val);
         // eprintln!("  farg: {:?}", val);
     }
     let res = g(st, &f.body);
-    // FIXME: env.leave
-    //st.env = env_orig;
+    st.env.leave(env_orig);
     res
 }
 
@@ -250,12 +303,12 @@ fn call_cls(
         if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
             // eprintln!("        fun name: {}", fd.name.0);
             // add closure label to env
-            //let env_orig = st.env.clone();
-            st.env.insert(id::T(fd.name.0.clone()), Val::Int(cls_addr));
+            let env_orig = st.env.enter();
+            st.env.set(&id::T(fd.name.0.clone()), &Val::Int(cls_addr));
             // FIXME: precompute and store the id::T above
             // call it
             let val = call_interpreted(st, fd, int_args, float_args);
-            //st.env = env_orig;
+            st.env.leave(env_orig);
             val
         } else {
             // FIXME: reverse map for labels?
@@ -426,7 +479,9 @@ pub fn g(st: &mut State, e: &asm::T) -> Val {
     let mut exp: &asm::T = e;
     while let Let((ref x, ref _t), ref e_, ref t_) = exp {
         let v = h(st, e_);
-        st.env.insert(x.clone(), v);
+        // FIXME: enter?
+        //st.env.insert(x.clone(), v);
+        st.env.set(x, &v);
         exp = t_;
     }
     let Ans(ref e_) = exp else { unreachable!() };
@@ -487,11 +542,18 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
     // rather than create a new binding...
     //
     // Initial heap pointer
-    let env = im::hashmap::HashMap::unit(
-        id::T(String::from("min_caml_hp")),
-        Val::Int(addr),
-    );
+    // let env = im::hashmap::HashMap::unit(
+    //     id::T(String::from("min_caml_hp")),
+    //     Val::Int(addr),
+    // );
     //addr += 4;
+
+    // FIXME: Env::new
+    let mut env = Env {
+        globals: std::collections::HashMap::new(),
+        locals: M::new(),
+    };
+    env.set_global(&id::T(String::from("min_caml_hp")), &Val::Int(addr));
 
     eprintln!("*** Memory\n{:?}\n", mem);
 
@@ -532,7 +594,7 @@ fn builtin_min_caml_create_array(
     if let (Val::Int(ref sz), Val::Int(ref def)) = (&args[0], &args[1]) {
         let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
         let addr = get_int(st, &min_caml_hp);
-        st.env.insert(min_caml_hp, Val::Int(addr + 4 * sz));
+        st.env.set(&min_caml_hp, &Val::Int(addr + 4 * sz));
         for n in 0..*sz {
             st.mem.insert(addr + 4 * n, Val::Int(*def));
         }
@@ -551,7 +613,7 @@ fn builtin_min_caml_create_float_array(
     if let (Val::Int(ref sz), Val::Float(ref def)) = (&args[0], &fargs[0]) {
         let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
         let addr = get_int(st, &min_caml_hp);
-        st.env.insert(min_caml_hp, Val::Int(addr + 8 * sz));
+        st.env.set(&min_caml_hp, &Val::Int(addr + 8 * sz));
         for n in 0..*sz {
             st.mem.insert(addr + 8 * n, Val::Float(*def));
         }

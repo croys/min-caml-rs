@@ -203,11 +203,11 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 &|ref y, ref offset, ref store_fv| {
                     asm::seq(
                         &StDF(y.clone(), x.clone(), C(*offset), 1),
-                        &store_fv,
+                        store_fv,
                     )
                 },
                 &|ref y, _, ref offset, ref store_fv| {
-                    asm::seq(&St(y.clone(), x.clone(), C(*offset), 1), &store_fv)
+                    asm::seq(&St(y.clone(), x.clone(), C(*offset), 1), store_fv)
                 },
             );
             let z = id::genid(&id::T(String::from("l")));
