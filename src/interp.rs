@@ -156,7 +156,6 @@ fn call_interpreted(
 ) -> Val {
     //eprintln!("Applying {}", f.name.0);
     let env_orig = st.env.clone();
-    let mut env_ = env_orig.clone();
     if args.len() != f.args.len() {
         panic!("Mismatch between supplied arguments and function signature");
     }
@@ -167,15 +166,14 @@ fn call_interpreted(
     }
     for (name, val) in std::iter::zip(f.args.iter(), args.iter()) {
         let val = env_orig.get(val).expect("missing value");
-        env_.insert(name.clone(), val.clone());
+        st.env.insert(name.clone(), val.clone());
         //eprintln!("  arg: {:?}", val);
     }
     for (name, val) in std::iter::zip(f.fargs.iter(), float_args.iter()) {
         let val = env_orig.get(val).expect("missing value");
-        env_.insert(name.clone(), val.clone());
+        st.env.insert(name.clone(), val.clone());
         //eprintln!("  farg: {:?}", val);
     }
-    st.env = env_;
     let res = g(st, &f.body);
     st.env = env_orig;
     res
@@ -336,10 +334,8 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
                 if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
                     // add closure label to env
                     let env_orig = st.env.clone();
-                    let env_ = st
-                        .env
-                        .update(id::T(fd.name.0.clone()), Val::Int(cls_addr));
-                    st.env = env_;
+                    st.env.insert(id::T(fd.name.0.clone()), Val::Int(cls_addr));
+                    // FIXME: precompute and store the id::T above
                     // call it
                     let val = call_interpreted(st, fd, int_args, float_args);
                     st.env = env_orig;
@@ -390,7 +386,7 @@ pub fn g(st: &mut State, e: &asm::T) -> Val {
         Ans(ref e_) => h(st, e_),
         Let((ref x, ref _t), ref e_, ref t_) => {
             let v = h(st, e_);
-            st.env = st.env.update(x.clone(), v);
+            st.env.insert(x.clone(), v);
             g(st, t_)
         }
     }
@@ -459,6 +455,11 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
     eprintln!("*** Memory\n{:?}\n", mem);
 
     let mut st = State { labels, env, mem };
+    use std::mem::{size_of, size_of_val};
+    eprintln!("State size: {}", size_of::<State>());
+    eprintln!("State.labels size: {}", size_of_val(&st.labels));
+    eprintln!("State.env size: {}", size_of_val(&st.env));
+    eprintln!("State.mem size: {}", size_of_val(&st.mem));
     let res = g(&mut st, term);
     (res, st)
 }
@@ -490,7 +491,7 @@ fn builtin_min_caml_create_array(
     if let (Val::Int(ref sz), Val::Int(ref def)) = (&args[0], &args[1]) {
         let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
         let addr = get_int(st, &min_caml_hp);
-        st.env = st.env.update(min_caml_hp, Val::Int(addr + 4 * sz));
+        st.env.insert(min_caml_hp, Val::Int(addr + 4 * sz));
         for n in 0..*sz {
             st.mem.insert(addr + 4 * n, Val::Int(*def));
         }
@@ -509,7 +510,7 @@ fn builtin_min_caml_create_float_array(
     if let (Val::Int(ref sz), Val::Float(ref def)) = (&args[0], &fargs[0]) {
         let min_caml_hp = id::T(String::from("min_caml_hp")); // FIXME:
         let addr = get_int(st, &min_caml_hp);
-        st.env = st.env.update(min_caml_hp, Val::Int(addr + 8 * sz));
+        st.env.insert(min_caml_hp, Val::Int(addr + 8 * sz));
         for n in 0..*sz {
             st.mem.insert(addr + 8 * n, Val::Float(*def));
         }
