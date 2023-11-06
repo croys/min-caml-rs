@@ -1,5 +1,5 @@
 mod closure;
-//mod interp;
+mod interp;
 mod k_normal;
 #[rustfmt::skip] mod lexer;
 #[rustfmt::skip] mod parser;
