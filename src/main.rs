@@ -88,7 +88,16 @@ fn main() {
     //
     // Below works, but we are clearly using too much stack..
     let thr = thread::Builder::new()
-        .stack_size(96 * 1024 * 1024)
+        //.stack_size(96 * 1024 * 1024)
+        //.stack_size(88 * 1024 * 1024)
+        //.stack_size(80 * 1024 * 1024)
+        //.stack_size(72 * 1024 * 1024)
+        //.stack_size(68 * 1024 * 1024)
+        //.stack_size(64 * 1024 * 1024)
+        .stack_size(56 * 1024 * 1024)
+        //.stack_size(52 * 1024 * 1024)
+        //.stack_size(48 * 1024 * 1024)
+        //.stack_size(8 * 1024 * 1024) // Note: enough for release
         .spawn(move || {
             fn dump_extenv() {
                 typing::EXTENV.with(|extenv_| {

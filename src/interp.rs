@@ -218,6 +218,76 @@ fn call_fun(
     }
 }
 
+fn call_cls(
+    st: &mut State,
+    cls: &id::T,
+    int_args: &[id::T],
+    float_args: &[id::T],
+) -> Val {
+    let cls_addr = get_int(st, cls);
+    let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
+        panic!(
+            "No address of function in closure {} at {}",
+            cls.0, cls_addr
+        )
+    });
+    if let Val::Int(fn_addr) = fn_val {
+        let fn_val = st
+            .mem
+            .get(fn_addr)
+            .unwrap_or_else(|| {
+                panic!("Expected closure at address {} for {}", cls_addr, cls.0)
+            })
+            .clone();
+        if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
+            // add closure label to env
+            let env_orig = st.env.clone();
+            st.env.insert(id::T(fd.name.0.clone()), Val::Int(cls_addr));
+            // FIXME: precompute and store the id::T above
+            // call it
+            let val = call_interpreted(st, fd, int_args, float_args);
+            st.env = env_orig;
+            val
+        } else {
+            // FIXME: reverse map for labels?
+            panic!(
+                "Expected function for closure at {}, got {:?}",
+                cls_addr, fn_val,
+            )
+        }
+    } else {
+        panic!(
+            "Expected address of function for closure \
+                {} at {}, got {:?}",
+            cls.0, cls_addr, fn_val
+        )
+    }
+}
+
+fn call_dir(
+    st: &mut State,
+    cls: &id::L,
+    int_args: &[id::T],
+    float_args: &[id::T],
+) -> Val {
+    let fn_addr = *st
+        .labels
+        .get(cls)
+        .unwrap_or_else(|| panic!("Unknown label for closure: {}", cls.0));
+    let fn_val = st
+        .mem
+        .get(&fn_addr)
+        .unwrap_or_else(|| {
+            panic!("Expected closure at address {} for {}", fn_addr, cls.0)
+        })
+        .clone(); // FIXME: Use Rc<RefCell<>>
+    if let Val::Fun(ref f) = fn_val {
+        call_fun(st, f, int_args, float_args)
+    } else {
+        panic!("Expected function value for '{}'", cls.0)
+    }
+}
+
 pub fn h(st: &mut State, e: &asm::Exp) -> Val {
     use asm::Exp::*;
     match e {
@@ -312,68 +382,11 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
         IfFGt(ref x, ref y, ref e1, ref e2) => {
             cond_f(st, x, y, e1, e2, &|x, y| x > y)
         }
-        CallCls(cls, int_args, float_args) => {
-            let cls_addr = get_int(st, cls);
-            let fn_val = st.mem.get(&cls_addr).unwrap_or_else(|| {
-                panic!(
-                    "No address of function in closure {} at {}",
-                    cls.0, cls_addr
-                )
-            });
-            if let Val::Int(fn_addr) = fn_val {
-                let fn_val = st
-                    .mem
-                    .get(fn_addr)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Expected closure at address {} for {}",
-                            cls_addr, cls.0
-                        )
-                    })
-                    .clone();
-                if let Val::Fun(Callable::Interpret(ref fd)) = fn_val {
-                    // add closure label to env
-                    let env_orig = st.env.clone();
-                    st.env.insert(id::T(fd.name.0.clone()), Val::Int(cls_addr));
-                    // FIXME: precompute and store the id::T above
-                    // call it
-                    let val = call_interpreted(st, fd, int_args, float_args);
-                    st.env = env_orig;
-                    val
-                } else {
-                    // FIXME: reverse map for labels?
-                    panic!(
-                        "Expected function for closure at {}, got {:?}",
-                        cls_addr, fn_val,
-                    )
-                }
-            } else {
-                panic!(
-                    "Expected address of function for closure \
-                        {} at {}, got {:?}",
-                    cls.0, cls_addr, fn_val
-                )
-            }
+        CallCls(ref cls, ref int_args, ref float_args) => {
+            call_cls(st, cls, int_args, float_args)
         }
-        CallDir(cls, int_args, float_args) => {
-            let fn_addr = *st.labels.get(cls).unwrap_or_else(|| {
-                panic!("Unknown label for closure: {}", cls.0)
-            });
-            let fn_val = st
-                .mem
-                .get(&fn_addr)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Expected closure at address {} for {}",
-                        fn_addr, cls.0
-                    )
-                })
-                .clone(); // FIXME: Use Rc<RefCell<>>
-            if let Val::Fun(ref f) = fn_val {
-                call_fun(st, f, int_args, float_args)
-            } else {
-                panic!("Expected function value for '{}'", cls.0)
-            }
+        CallDir(ref cls, ref int_args, ref float_args) => {
+            call_dir(st, cls, int_args, float_args)
         }
         Save(_, _) => todo!(),
         Restore(_) => todo!(),
@@ -381,15 +394,24 @@ pub fn h(st: &mut State, e: &asm::Exp) -> Val {
 }
 
 pub fn g(st: &mut State, e: &asm::T) -> Val {
+    // use asm::T::*;
+    // match e {
+    //     Ans(ref e_) => h(st, e_),
+    //     Let((ref x, ref _t), ref e_, ref t_) => {
+    //         let v = h(st, e_);
+    //         st.env.insert(x.clone(), v);
+    //         g(st, t_)
+    //     }
+    // }
     use asm::T::*;
-    match e {
-        Ans(ref e_) => h(st, e_),
-        Let((ref x, ref _t), ref e_, ref t_) => {
-            let v = h(st, e_);
-            st.env.insert(x.clone(), v);
-            g(st, t_)
-        }
+    let mut exp: &asm::T = e;
+    while let Let((ref x, ref _t), ref e_, ref t_) = exp {
+        let v = h(st, e_);
+        st.env.insert(x.clone(), v);
+        exp = t_;
     }
+    let Ans(ref e_) = exp else { unreachable!() };
+    h(st, e_)
 }
 
 pub fn f(p: &asm::Prog) -> (Val, State) {
