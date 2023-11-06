@@ -48,10 +48,12 @@ possible.
   * constant folding
   * unnecessary definition elimination
 * Closure Conversion - done
-* Code generation - done
+* Virtual Machine Code generation - done
+* LLVM Generation
 * System library
   * for reference interpreter - in progress
-* Reference interpreter - in progress
+  * for LLVM backend
+* Reference interpreter - mostly done
 * REPL
   * for reference interpreter
 * Command line - in progress
