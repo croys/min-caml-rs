@@ -24,8 +24,8 @@ fn test_f() {
                 "cls-reg-bug.ml",
                 "float.ml",
                 // long-running
-                "ack.ml", // FIXME: now broken due to temporary "fix"
-                "fib.ml", // FIXME: now broken due to temporary "fix"
+                "ack.ml",
+                "fib.ml",
             ];
             if ignore_tests.iter().any(|t| path.ends_with(t)) {
                 continue;
