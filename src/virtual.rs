@@ -18,7 +18,7 @@ thread_local! {
 }
 
 fn classify<A: Clone, B>(
-    xts: &Vec<(A, Type)>,
+    xts: &[(A, Type)],
     ini: B,
     addf: &dyn Fn(B, A) -> B,
     addi: &dyn Fn(B, A, Type) -> B,
@@ -30,10 +30,10 @@ fn classify<A: Clone, B>(
     })
 }
 
-fn separate<A: Clone>(xts: &Vec<(A, Type)>) -> (Vec<A>, Vec<A>) {
+fn separate<A: Clone>(xts: &[(A, Type)]) -> (Vec<A>, Vec<A>) {
     // Note: This Rust equivalent is pretty inefficient. Just use a loop?
     classify(
-        &xts,
+        xts,
         (Vec::new(), Vec::new()),
         &|(ref int, ref float), x| {
             // even im::Vector is not functional style...
@@ -50,7 +50,7 @@ fn separate<A: Clone>(xts: &Vec<(A, Type)>) -> (Vec<A>, Vec<A>) {
 }
 
 fn expand<A: Clone, B>(
-    xts: &Vec<(A, Type)>,
+    xts: &[(A, Type)],
     ini: (i32, B),
     addf: &dyn Fn(A, i32, B) -> B,
     addi: &dyn Fn(A, Type, i32, B) -> B,
@@ -229,7 +229,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             )
         }
         Closure::AppCls(ref x, ref ys) => {
-            let xts = ys
+            let xts: Vec<(id::T, Type)> = ys
                 .iter()
                 .map(|y| (y.clone(), env.get(y).expect("no type").clone()))
                 .collect();
@@ -237,7 +237,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             Ans(CallCls(x.clone(), int, float))
         }
         Closure::AppDir(ref x, ref ys) => {
-            let xts = ys
+            let xts: Vec<(id::T, Type)> = ys
                 .iter()
                 .map(|y| (y.clone(), env.get(y).expect("no type").clone()))
                 .collect();
@@ -248,7 +248,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         /* 組の生成 (caml2html: virtual_tuple) */
         {
             let y = id::genid(&id::T(String::from("t")));
-            let xts = xs
+            let xts: Vec<(id::T, Type)> = xs
                 .iter()
                 .map(|x| {
                     (

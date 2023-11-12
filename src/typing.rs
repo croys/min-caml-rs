@@ -145,10 +145,10 @@ pub fn occur(r1: &Rc<RefCell<Option<Type>>>, t1: &Type) -> bool {
         Tuple(t2s) => t2s.iter().any(|t| occur(r1, t)),
         Array(t2) => occur(r1, t2),
         // FIXME: check below, want pointer comparison...
-        Var(r2) if r1.as_ptr() == r2.as_ptr() => true,
-        Var(r2) => match &*(r2.borrow()) {
+        Var(ref r2) if r1.as_ptr() == r2.as_ptr() => true,
+        Var(ref r2) => match *r2.borrow() {
             None => false,
-            Some(t2) => occur(r1, t2),
+            Some(ref t2) => occur(r1, t2),
         },
         _ => false,
     }
@@ -197,6 +197,7 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
                 }
             };
             if fresh {
+                eprintln!("unifying {:?} with {:?}", r1, t2);
                 r1.replace(Some(t2.clone()));
             };
             res
@@ -217,6 +218,7 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<(), Unify> {
                 }
             };
             if fresh {
+                eprintln!("unifying {:?} with {:?}", r2, t1);
                 r2.replace(Some(t1.clone()));
             };
             res
@@ -334,7 +336,11 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> Result<Type, Error> {
                 es.iter().map(|x| g(env, x)).collect();
             let fun_t = Type::Fun(arg_tys_res?, res_t.clone());
             unify_(&g(env, e_)?, &fun_t)?;
-            Ok(*res_t)
+            if let Type::Fun(_, t_) = fun_t {
+                Ok(*t_)
+            } else {
+                unreachable!()
+            }
         }
         Tuple(es) => {
             let tys_res: Result<Vec<Type>, Error> =
@@ -376,12 +382,17 @@ pub fn g(env: &im::HashMap<id::T, Type>, e: &Syntax) -> Result<Type, Error> {
     }
 }
 
-#[allow(dead_code)] // FIXME:
-pub fn f(e: &Syntax) -> Result<Syntax, Box<dyn std::error::Error>> {
-    // FIXME: initialise extenv
+#[allow(dead_code)]
+pub fn f2(
+    e: &Syntax,
+    init_env: &Option<std::collections::HashMap<id::T, Type>>,
+) -> Result<Syntax, Box<dyn std::error::Error>> {
     EXTENV.with(|extenv_| {
         let mut extenv = extenv_.borrow_mut();
-        extenv.clear();
+        match init_env {
+            None => extenv.clear(),
+            Some(ref m) => *extenv = m.clone(),
+        }
     });
 
     let env = im::HashMap::new();
@@ -400,4 +411,9 @@ pub fn f(e: &Syntax) -> Result<Syntax, Box<dyn std::error::Error>> {
             "top level does not have type unit".to_string(),
         )),
     }
+}
+
+#[allow(dead_code)]
+pub fn f(e: &Syntax) -> Result<Syntax, Box<dyn std::error::Error>> {
+    f2(e, &None)
 }

@@ -129,7 +129,23 @@ fn main() {
                 println!("{}", out);
                 return;
             }
-            let typed_res = typing::f(&ast);
+
+            use ty::Type;
+            let float_fun_ty =
+                Type::Fun(vec![Type::Float], Box::new(Type::Float));
+            let initial_env = Some(std::collections::HashMap::from_iter(vec![
+                (id::T("abs_float".into()), float_fun_ty.clone()),
+                (id::T("sqrt".into()), float_fun_ty.clone()),
+                (id::T("sin".into()), float_fun_ty.clone()),
+                (id::T("cos".into()), float_fun_ty.clone()),
+                (id::T("tan".into()), float_fun_ty.clone()),
+                (
+                    id::T("float_of_int".into()),
+                    Type::Fun(vec![Type::Int], Box::new(Type::Float)),
+                ),
+            ]));
+
+            let typed_res = typing::f2(&ast, &initial_env);
             if let Err(ref e) = typed_res {
                 panic!("Type inference failed:\n{}", e);
             }

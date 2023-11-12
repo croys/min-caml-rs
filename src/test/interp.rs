@@ -18,7 +18,7 @@ fn test_f() {
         // FIXME: WIP - ignore these tests for now
         if true {
             let ignore_tests = [
-                "float.ml", // missing built-in
+                "float.ml", // missing type signature
                 "ack.ml",   // long-running
                 "fib.ml",   // long-running
             ];

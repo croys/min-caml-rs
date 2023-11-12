@@ -244,17 +244,17 @@ fn call_builtin(
     args: &[id::T],
     float_args: &[id::T],
 ) -> Val {
-    //eprintln!("Applying builtin {}", name);
+    // eprintln!("Applying builtin {}", name);
     let mut args_ = Vec::new();
     for x in args.iter() {
         let val = st.env.get(x).expect("missing value");
-        //eprintln!("  arg: {:?}", val);
+        // eprintln!("  arg: {:?}", val);
         args_.push(val.clone())
     }
     let mut fargs_ = Vec::new();
     for x in float_args.iter() {
         let val = st.env.get(x).expect("missing value");
-        //eprintln!("  farg: {:?}", val);
+        // eprintln!("  farg: {:?}", val);
         fargs_.push(val.clone())
     }
     (*f)(st, &args_, &fargs_)
@@ -540,18 +540,21 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
         Rc::new(builtin_min_caml_create_float_array),
     );
     add_builtin("min_caml_truncate", Rc::new(builtin_min_caml_truncate));
-
-    // FIXME: probably need special handling for lets with this....
-    // generated code looks like the lets update min_caml_hp
-    // rather than create a new binding...
-    //
-    // Initial heap pointer
-    // let env = im::hashmap::HashMap::unit(
-    //     id::T(String::from("min_caml_hp")),
-    //     Val::Int(addr),
-    // );
-    //addr += 4;
-
+    add_builtin(
+        "min_caml_abs_float",
+        float_unary_fn(Rc::new(&|x: f64| x.abs())),
+    );
+    add_builtin("min_caml_sqrt", float_unary_fn(Rc::new(&|x: f64| x.sqrt())));
+    add_builtin("min_caml_sin", float_unary_fn(Rc::new(&|x: f64| x.sin())));
+    add_builtin("min_caml_cos", float_unary_fn(Rc::new(&|x: f64| x.cos())));
+    add_builtin(
+        "min_caml_float_of_int",
+        Rc::new(builtin_min_caml_float_of_int),
+    );
+    add_builtin(
+        "min_caml_int_of_float",
+        Rc::new(builtin_min_caml_int_of_float),
+    );
     // FIXME: Env::new
     let mut env = Env {
         globals: std::collections::HashMap::new(),
@@ -647,6 +650,45 @@ fn builtin_min_caml_truncate(
 ) -> Val {
     if let Val::Float(ref x) = &fargs[0] {
         Val::Int(*x as i32)
+    } else {
+        panic!("expected arguments [] [x : Float]")
+    }
+}
+
+fn float_unary_fn(f: Rc<dyn Fn(f64) -> f64>) -> BuiltinFn {
+    Rc::new(move |_st: &mut State, args: &[Val], fargs: &[Val]| {
+        if fargs.is_empty() {
+            panic!(
+                "expected arguments [] [x : Float], got: {:?} {:?}",
+                args, fargs
+            )
+        } else if let Val::Float(ref x) = &fargs[0] {
+            Val::Float(f(*x))
+        } else {
+            panic!("expected arguments [] [x : Float]")
+        }
+    })
+}
+
+fn builtin_min_caml_float_of_int(
+    _st: &mut State,
+    args: &[Val],
+    _fargs: &[Val],
+) -> Val {
+    if let Val::Int(ref x) = &args[0] {
+        Val::Float(f64::from(*x))
+    } else {
+        panic!("expected arguments [x : Int] []")
+    }
+}
+
+fn builtin_min_caml_int_of_float(
+    _st: &mut State,
+    _args: &[Val],
+    fargs: &[Val],
+) -> Val {
+    if let Val::Float(ref x) = &fargs[0] {
+        Val::Int(x.round() as i32)
     } else {
         panic!("expected arguments [] [x : Float]")
     }
