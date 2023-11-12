@@ -528,6 +528,10 @@ pub fn f(p: &asm::Prog) -> (Val, State) {
 
     add_builtin("min_caml_print_int", Rc::new(builtin_min_caml_print_int));
     add_builtin(
+        "min_caml_print_newline",
+        Rc::new(builtin_min_caml_print_newline),
+    );
+    add_builtin(
         "min_caml_create_array",
         Rc::new(builtin_min_caml_create_array),
     );
@@ -575,13 +579,26 @@ fn builtin_min_caml_print_int(
     //eprintln!("builtin_min_caml_print_int");
     if !args.is_empty() {
         if let Val::Int(x) = args[0] {
-            println!("{}", x);
+            print!("{}", x);
             Val::Unit
         } else {
             panic!("Expected int")
         }
     } else {
         panic!("Missing argument")
+    }
+}
+
+fn builtin_min_caml_print_newline(
+    _st: &mut State,
+    args: &[Val],
+    _fargs: &[Val],
+) -> Val {
+    if args.is_empty() {
+        println!();
+        Val::Unit
+    } else {
+        panic!("Unexpected missing argument")
     }
 }
 

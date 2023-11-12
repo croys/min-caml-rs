@@ -18,14 +18,9 @@ fn test_f() {
         // FIXME: WIP - ignore these tests for now
         if true {
             let ignore_tests = [
-                // missing built-in
-                "matmul.ml",
-                "matmul-flat.ml",
-                "cls-reg-bug.ml",
-                "float.ml",
-                // long-running
-                "ack.ml",
-                "fib.ml",
+                "float.ml", // missing built-in
+                "ack.ml",   // long-running
+                "fib.ml",   // long-running
             ];
             if ignore_tests.iter().any(|t| path.ends_with(t)) {
                 continue;
