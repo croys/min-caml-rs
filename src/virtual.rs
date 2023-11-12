@@ -18,7 +18,7 @@ thread_local! {
 }
 
 fn classify<A: Clone, B>(
-    xts: Vec<(A, Type)>,
+    xts: &Vec<(A, Type)>,
     ini: B,
     addf: &dyn Fn(B, A) -> B,
     addi: &dyn Fn(B, A, Type) -> B,
@@ -30,10 +30,10 @@ fn classify<A: Clone, B>(
     })
 }
 
-fn separate<A: Clone>(xts: Vec<(A, Type)>) -> (Vec<A>, Vec<A>) {
+fn separate<A: Clone>(xts: &Vec<(A, Type)>) -> (Vec<A>, Vec<A>) {
     // Note: This Rust equivalent is pretty inefficient. Just use a loop?
     classify(
-        xts,
+        &xts,
         (Vec::new(), Vec::new()),
         &|(ref int, ref float), x| {
             // even im::Vector is not functional style...
@@ -50,7 +50,7 @@ fn separate<A: Clone>(xts: Vec<(A, Type)>) -> (Vec<A>, Vec<A>) {
 }
 
 fn expand<A: Clone, B>(
-    xts: Vec<(A, Type)>,
+    xts: &Vec<(A, Type)>,
     ini: (i32, B),
     addf: &dyn Fn(A, i32, B) -> B,
     addi: &dyn Fn(A, Type, i32, B) -> B,
@@ -198,7 +198,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 })
                 .collect();
             let (offset, store_fv) = expand(
-                yts,
+                &yts,
                 (4, e2_),
                 &|ref y, ref offset, ref store_fv| {
                     asm::seq(
@@ -233,7 +233,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 .iter()
                 .map(|y| (y.clone(), env.get(y).expect("no type").clone()))
                 .collect();
-            let (int, float) = separate(xts);
+            let (int, float) = separate(&xts);
             Ans(CallCls(x.clone(), int, float))
         }
         Closure::AppDir(ref x, ref ys) => {
@@ -241,7 +241,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 .iter()
                 .map(|y| (y.clone(), env.get(y).expect("no type").clone()))
                 .collect();
-            let (int, float) = separate(xts);
+            let (int, float) = separate(&xts);
             Ans(CallDir(x.clone(), int, float))
         }
         Closure::Tuple(ref xs) =>
@@ -260,7 +260,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 })
                 .collect();
             let (offset, store) = expand(
-                xts,
+                &xts,
                 (0, Ans(Mov(y.clone()))),
                 &|x, ref offset, ref store| {
                     asm::seq(&StDF(x.clone(), y.clone(), C(*offset), 1), store)
@@ -291,7 +291,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             let mut env_ = env.clone();
             env_.extend(xts.iter().cloned());
             let (_offset, load) = expand(
-                xts.clone(), // FIXME: expand should use ref
+                xts,
                 (0, g(&env_, e2)),
                 &|ref x, ref offset, ref load| {
                     /* [XX] a little ad hoc optimization */
@@ -353,11 +353,11 @@ pub fn h(fd: &closure::FunDef) -> asm::FunDef {
         formal_fv: ref zts,
         body: ref e,
     } = fd;
-    let (int, float) = separate(yts.clone()); // FIXME: ref
+    let (int, float) = separate(yts);
     let env_ = M::from_iter(zts.clone())
         + M::from_iter(yts.clone()).update(id::T(x.clone()), t.clone());
     let (_offset, load) = expand(
-        zts.clone(),
+        zts,
         (4, g(&env_, e)),
         &|ref z, ref offset, ref load| {
             asm::fletd(
