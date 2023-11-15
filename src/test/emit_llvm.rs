@@ -1,15 +1,18 @@
+use crate::emit_llvm::{Constant, Context, ExecutionEngine, Global, Module,
+    Type };
 extern crate llvm_sys;
 
 
 //use llvm_sys::core::{LLVMConstInt};
-use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd};
-use llvm_sys::core::{LLVMGetGlobalContext};
+use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd, LLVMContextCreate};
+/*, LLVMStructTypeInContext, */
+use llvm_sys::core::LLVMGetGlobalContext;
 //use llvm_sys::core::{LLVMModuleCreateWithName};
 //use llvm_sys::disassembler::{LLVMCreateDisasm, LLVMDisasmInstruction};
 use llvm_sys::execution_engine::{LLVMExecutionEngineRef, LLVMCreateExecutionEngineForModule, LLVMLinkInMCJIT, LLVMGetFunctionAddress, LLVMGetGlobalValueAddress};
 //use llvm_sys::prelude::LLVMBool;
 use llvm_sys::core::{LLVMConstReal, LLVMConstArray};
-use llvm_sys::prelude::{LLVMValueRef};
+use llvm_sys::prelude::LLVMValueRef;
 //use llvm_sys::LLVMValue;
 
 //use llvm_sys::target::{LLVM_InitializeNativeAsmParser};
@@ -103,7 +106,8 @@ pub fn test_llvm_module2() {
 pub fn test_llvm_module3() {
     // create a module with a simple function: (Int, Int) -> Int
     let context = unsafe {
-        LLVMGetGlobalContext()
+        //LLVMGetGlobalContext()
+        LLVMContextCreate()
     };
 
     let module = unsafe {
@@ -155,6 +159,7 @@ pub fn test_llvm_module3() {
     
     #[allow(clippy::zero_ptr)]
     unsafe {
+        // Below should presumably only be done once per process/thread?
         LLVMLinkInMCJIT();
         LLVM_InitializeNativeTarget();
         //LLVM_InitializeNativeAsmParser();
@@ -186,3 +191,45 @@ pub fn test_llvm_module3() {
 
 }
 
+
+#[test]
+pub fn test_llvm_module4() {
+    // create a module with a global constant, read the constant..
+    //let context = Context::get_global_context();
+    let context = Context::new();
+
+    let mut module = Module::create_with_name_in_context("test_mod4", &context);
+
+    let double_ty = Type::double_type_in_context(&context);
+    let array_double_ty = Type::array_type(&double_ty, 1);
+
+    // FIXME: test array of arrays
+
+    let x_0 = Constant::real(&double_ty, 1.61);
+    let x_1 = Constant::real(&double_ty, 3.22);
+    let arr = Constant::array(&double_ty, &[&x_0, &x_1]);
+
+    let global_var =
+        Global::add_to_module(&module, "dbl_arr", &array_double_ty);
+
+    global_var.set_constant(&arr);
+
+    module.dump();
+
+    unsafe {
+        LLVMLinkInMCJIT();
+        LLVM_InitializeNativeTarget();
+        //LLVM_InitializeNativeAsmParser();
+        LLVM_InitializeNativeAsmPrinter();
+    };
+    let ee = ExecutionEngine::for_module(&mut module);
+
+    let addr =  ee.global_value_address("dbl_arr") as *const f64;
+    unsafe {
+        println!("GlobalValue for dbl_arr[0]: {:?} -> {}", addr, *addr);
+        println!("GlobalValue for dbl_arr[1]: {:?} -> {}", addr,
+            *(addr.wrapping_add(1)));
+        assert_eq!(1.61, *addr);
+        assert_eq!(3.22, *(addr.wrapping_add(1)));
+    }
+}

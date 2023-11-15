@@ -10,10 +10,12 @@
 //
 
 //#![feature(box_patterns)]
+#![allow(clippy::upper_case_acronyms)]
 
 mod alpha;
 mod asm;
 mod closure;
+mod emit_llvm;
 mod id;
 mod interp;
 mod k_normal;
@@ -42,6 +44,7 @@ enum Stage {
     Closure,
     VMCode,
     Interp,
+    LLVM,
 }
 
 impl fmt::Display for Stage {
@@ -63,6 +66,7 @@ impl<'s> From<&'s str> for Stage {
             "closure" => Stage::Closure,
             "vmcode" => Stage::VMCode,
             "interp" => Stage::Interp,
+            "llvm" => Stage::LLVM,
             _ => panic!("Unknown stage"),
         }
     }
@@ -205,6 +209,9 @@ fn main() {
                 println!("{}\n{:?}\n{}", sep, st, sep);
                 println!("{}\n{:?}\n{}", sep, val, sep);
                 return;
+            }
+            if args.stage == Stage::LLVM {
+                emit_llvm::f(&vmcode);
             }
         })
         .unwrap();
