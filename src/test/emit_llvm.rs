@@ -1,5 +1,5 @@
-use crate::emit_llvm::{Constant, Context, ExecutionEngine, Global, Module,
-    Type };
+use crate::emit_llvm::{BasicBlock, Builder, Constant, Context, ExecutionEngine,
+    Global, Module, /* RefOwner, */ Type, llvm_init };
 extern crate llvm_sys;
 
 
@@ -175,7 +175,8 @@ pub fn test_llvm_module3() {
 
         let f_addr = LLVMGetFunctionAddress(ee, "f\0".as_ptr() as *const c_char);
         let f_ptr = f_addr as *const();
-        let f: extern "C" fn(i32, i32) -> i32 = std::mem::transmute(f_ptr);
+        let f: fn(i32, i32) -> i32 = std::mem::transmute(f_ptr);
+        //let f: extern "C" fn(i32, i32) -> i32 = std::mem::transmute(f_ptr);
         //let f = f_addr as (unsafe extern "C" fn(i32, i32) -> i32);
         //let f = f_addr as extern "C" fn(i32, i32) -> i32;
 
@@ -207,29 +208,75 @@ pub fn test_llvm_module4() {
 
     let x_0 = Constant::real(&double_ty, 1.61);
     let x_1 = Constant::real(&double_ty, 3.22);
-    let arr = Constant::array(&double_ty, &[&x_0, &x_1]);
+    // FIXME: not sure if array takes ownership.
+    // need to look at LLVM source and/or
+    // investigate via explicit drop/dispose
+    let mut arr = Constant::array(&double_ty, &[&x_0, &x_1]);
 
     let global_var =
         Global::add_to_module(&module, "dbl_arr", &array_double_ty);
 
-    global_var.set_constant(&arr);
+    global_var.set_constant(&mut arr);
 
     module.dump();
 
-    unsafe {
-        LLVMLinkInMCJIT();
-        LLVM_InitializeNativeTarget();
-        //LLVM_InitializeNativeAsmParser();
-        LLVM_InitializeNativeAsmPrinter();
-    };
+    llvm_init();
     let ee = ExecutionEngine::for_module(&mut module);
 
     let addr =  ee.global_value_address("dbl_arr") as *const f64;
     unsafe {
         println!("GlobalValue for dbl_arr[0]: {:?} -> {}", addr, *addr);
-        println!("GlobalValue for dbl_arr[1]: {:?} -> {}", addr,
+        println!("GlobalValue for dbl_arr[1]: {:?} -> {}",
+            addr.wrapping_add(1),
             *(addr.wrapping_add(1)));
         assert_eq!(1.61, *addr);
         assert_eq!(3.22, *(addr.wrapping_add(1)));
     }
+}
+
+
+
+#[test]
+pub fn test_llvm_module5() {
+    // create a module with a simple function: (Int, Int) -> Int
+
+    let context = Context::new();
+    let mut module = Module::create_with_name_in_context("test_mod5", &context);
+
+    let int_ty = Type::int_type_in_context(&context, 32);
+    let arg_tys = [&int_ty, &int_ty];
+    let fun_ty = Type::function_type(&int_ty, &arg_tys);
+
+    let fun_val = module.add_function("f", &fun_ty);
+
+    // Add basic block to function
+    let fun_bb = BasicBlock::append_basic_block_in_context(
+        &context, &fun_val, "entry",
+    );
+
+    // // create builder & add instructions
+    let builder = Builder::create_builder_in_context(&context);
+
+    builder.position_builder_at_end(&fun_bb);
+    let arg0 = fun_val.get_param(0);
+    let arg1 = fun_val.get_param(1);
+    let tmp = builder.add(&arg0, &arg1, "tmp");
+    let _ = builder.ret(&tmp);
+    module.dump();
+
+    llvm_init();
+
+    let ee = ExecutionEngine::for_module(&mut module);
+    let f_addr = ee.function_address("f");
+
+    let f = unsafe {
+        let f: extern "C" fn(i32, i32) -> i32 = std::mem::transmute(f_addr);
+        f
+    };
+
+    println!("Addr for f: {:?}", f_addr);
+    let res = f(1, 2);
+    println!("f(1,2) = : {:?}", res);
+
+    module.dump();
 }
