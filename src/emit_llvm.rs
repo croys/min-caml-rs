@@ -1,9 +1,5 @@
-//#![allow(clippy::upper_case_acronyms)]
 #![allow(dead_code)]
 #![allow(unused_variables)] // FIXME
-#![allow(unused_imports)] // FIXME
-
-use llvm_sys::core::LLVMVoidTypeInContext;
 
 use crate::asm;
 use crate::closure;
@@ -293,8 +289,6 @@ pub fn f(p: &closure::Prog) {
         let f_ty_ = ty_to_type_in_context(&ctx, &split_ty_args(f_ty));
 
         let fun_val = module.add_function(name.0.as_str(), &f_ty_);
-        // FIXME: function to convert ty::Type to Type
-        //let fty = ty_to_type_in_context(&ctx, ty)
     }
 
     module.dump();

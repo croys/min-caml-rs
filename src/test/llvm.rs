@@ -1,5 +1,6 @@
 #![allow(unused_variables)] // FIXME
 
+use crate::llvm;
 use crate::llvm::{BasicBlock, Builder, Constant, Context,
     ExecutionEngine, Global, LLJITBuilder, Module, RefOwner, Type,
     llvm_init, Value,
@@ -22,7 +23,7 @@ use llvm_sys::core::{LLVMConstReal, LLVMConstArray};
 use llvm_sys::prelude::LLVMValueRef;
 //use llvm_sys::LLVMValue;
 
-use llvm_sys::support::LLVMAddSymbol;
+//use llvm_sys::support::LLVMAddSymbol;
 //use llvm_sys::target::{LLVM_InitializeNativeAsmParser};
 use llvm_sys::target::{LLVM_InitializeNativeTarget, LLVM_InitializeNativeAsmPrinter};
 
@@ -546,30 +547,17 @@ pub fn test_llvm_callback2() {
     let ee = ExecutionEngine::for_module(&mut module);
 
     // Add local process symbols
-    let add_addr = min_caml_test_add as *const core::ffi::c_void as u64;
-    let print_ln_addr =
-        min_caml_test_print_ln as *const core::ffi::c_void as u64;
-    let print_int_addr =
-        min_caml_test_print_int as *const core::ffi::c_void as u64;
+    let add_ptr = min_caml_test_add as *const core::ffi::c_void;
+    let print_ln_ptr = min_caml_test_print_ln as *const core::ffi::c_void;
+    let print_int_ptr = min_caml_test_print_int as *const core::ffi::c_void;
 
-    println!("Addr for min_caml_test_add: {:#X}", add_addr);
-    println!("Addr for min_caml_test_print_ln: {:#X}", print_ln_addr);
-    println!("Addr for min_caml_test_print_int: {:#X}", print_int_addr);
+    println!("Addr for min_caml_test_add: {:#X}", add_ptr as u64);
+    println!("Addr for min_caml_test_print_ln: {:#X}", print_ln_ptr as u64);
+    println!("Addr for min_caml_test_print_int: {:#X}", print_int_ptr as u64);
 
-    unsafe {
-        let name = std::ffi::CString::new("add").unwrap();
-        LLVMAddSymbol(name.as_ptr(), add_addr as *mut libc::c_void);
-    }
-
-    unsafe {
-        let name = std::ffi::CString::new("print_ln").unwrap();
-        LLVMAddSymbol(name.as_ptr(), print_ln_addr as *mut libc::c_void);
-    }
-
-    unsafe {
-        let name = std::ffi::CString::new("print_int").unwrap();
-        LLVMAddSymbol(name.as_ptr(), print_int_addr as *mut libc::c_void);
-    }
+    llvm::add_symbol("add", add_ptr);
+    llvm::add_symbol("print_ln", print_ln_ptr);
+    llvm::add_symbol("print_int", print_int_ptr);
 
     // FIXME: try iterating over symbols
     //let add_addr_2 = ee.function_address("add");

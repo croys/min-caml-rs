@@ -18,7 +18,6 @@ use llvm_sys::core::LLVMCreateBuilderInContext;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::core::LLVMVoidTypeInContext;
-//use llvm_sys::core::{LLVMGetGlobalContext, LLVMConstInt, LLVMDoubleTypeInContext, LLVMDumpValue, LLVMPrintValueToString, LLVMDisposeMessage, LLVMGetValueName2, LLVMConstArray, LLVMAddGlobal, LLVMModuleCreateWithNameInContext, LLVMContextDispose};
 use llvm_sys::core::{
     LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMConstArray, LLVMConstInt,
     LLVMConstReal, LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage,
@@ -38,7 +37,6 @@ use llvm_sys::execution_engine::{
 use llvm_sys::orc2::lljit::LLVMOrcCreateLLJIT;
 use llvm_sys::orc2::lljit::LLVMOrcCreateLLJITBuilder;
 use llvm_sys::orc2::lljit::LLVMOrcLLJITAddLLVMIRModule;
-//use llvm_sys::orc2::lljit::LLVMOrcLLJITAddLLVMIRModuleWithRT;
 use llvm_sys::orc2::lljit::LLVMOrcLLJITBuilderRef;
 use llvm_sys::orc2::lljit::LLVMOrcLLJITGetExecutionSession;
 use llvm_sys::orc2::lljit::LLVMOrcLLJITGetMainJITDylib;
@@ -49,7 +47,6 @@ use llvm_sys::orc2::LLVMJITCSymbolMapPair;
 use llvm_sys::orc2::LLVMJITEvaluatedSymbol;
 use llvm_sys::orc2::LLVMJITSymbolFlags;
 use llvm_sys::orc2::LLVMOrcAbsoluteSymbols;
-//use llvm_sys::orc2::LLVMOrcCSymbolMapPairs;
 use llvm_sys::orc2::LLVMOrcCreateNewThreadSafeContext;
 use llvm_sys::orc2::LLVMOrcCreateNewThreadSafeModule;
 use llvm_sys::orc2::LLVMOrcDisposeThreadSafeContext;
@@ -64,24 +61,18 @@ use llvm_sys::orc2::LLVMOrcThreadSafeContextRef;
 use llvm_sys::orc2::LLVMOrcThreadSafeModuleRef;
 //use llvm_sys::orc2::LLVMOrcThreadSafeModuleWithModuleDo;
 use llvm_sys::prelude::LLVMBasicBlockRef;
-//use llvm_sys::execution_engine::{LLVMGetFunctionAddress, LLVMGetGlobalValueAddress, LLVMAddModule};
-//use llvm_sys::object::LLVMGetSymbolAddress;
-//use llvm_sys::prelude::{/* LLVMBuilderRef, */ LLVMValueRef};
 use llvm_sys::prelude::LLVMBuilderRef;
 use llvm_sys::prelude::LLVMValueRef;
 use llvm_sys::prelude::{LLVMContextRef, LLVMModuleRef, LLVMTypeRef};
 
+use llvm_sys::support::LLVMAddSymbol;
 use llvm_sys::target::LLVM_InitializeNativeAsmPrinter;
 use llvm_sys::target::LLVM_InitializeNativeTarget;
-
-//use llvm_sys::LLVMModule;
 
 use llvm_sys::core::{
     LLVMArrayType, LLVMDoubleType, LLVMDoubleTypeInContext, LLVMInt32Type,
     LLVMInt32TypeInContext, LLVMIntType, LLVMIntTypeInContext,
 };
-
-//use llvm_sys::support::LLVMAddSymbol;
 
 use libc::c_char;
 use std::collections::HashMap;
@@ -614,6 +605,21 @@ pub fn llvm_init() {
         //LLVM_InitializeNativeAsmParser();
         LLVM_InitializeNativeAsmPrinter();
     }
+}
+
+// FIXME: need macros for variadic types
+pub fn add_symbol_for_fn<A, B>(name: &str, f: &extern "C" fn(A) -> B) {
+    let name_ = std::ffi::CString::new(name).unwrap();
+    let f_ptr = f as *const extern "C" fn(A) -> B;
+    let addr = f_ptr as *const core::ffi::c_void as u64;
+    unsafe { LLVMAddSymbol(name_.as_ptr(), addr as *mut libc::c_void) }
+}
+
+pub fn add_symbol(name: &str, ptr: *const core::ffi::c_void) {
+    let name_ = std::ffi::CString::new(name).unwrap();
+    //let addr = ptr as *const core::ffi::c_void as u64;
+    let addr = ptr as u64;
+    unsafe { LLVMAddSymbol(name_.as_ptr(), addr as *mut libc::c_void) }
 }
 
 pub struct LLJITBuilder {
