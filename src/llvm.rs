@@ -24,7 +24,7 @@ use llvm_sys::core::{
     LLVMDisposeModule, LLVMDumpModule, LLVMDumpValue, LLVMFunctionType,
     LLVMGetGlobalContext, LLVMGetParam, LLVMGetValueName2,
     LLVMModuleCreateWithNameInContext, LLVMPrintValueToString,
-    LLVMSetGlobalConstant, LLVMSetInitializer,
+    LLVMSetExternallyInitialized, LLVMSetGlobalConstant, LLVMSetInitializer,
 };
 use llvm_sys::error::LLVMErrorRef;
 use llvm_sys::error::LLVMErrorSuccess;
@@ -620,6 +620,12 @@ pub fn add_symbol(name: &str, ptr: *const core::ffi::c_void) {
     //let addr = ptr as *const core::ffi::c_void as u64;
     let addr = ptr as u64;
     unsafe { LLVMAddSymbol(name_.as_ptr(), addr as *mut libc::c_void) }
+}
+
+pub fn set_externally_initialized(val: &Global, ext: bool) {
+    unsafe {
+        LLVMSetExternallyInitialized(val.to_ref(), if ext { 1 } else { 0 })
+    }
 }
 
 pub struct LLJITBuilder {

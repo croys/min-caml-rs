@@ -11,7 +11,7 @@ extern crate llvm_sys;
 
 
 //use llvm_sys::core::{LLVMConstInt};
-use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd, LLVMContextCreate, LLVMSetExternallyInitialized};
+use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd, LLVMContextCreate };
 /*, LLVMStructTypeInContext, */
 use llvm_sys::core::LLVMGetGlobalContext;
 //use llvm_sys::core::{LLVMModuleCreateWithName};
@@ -324,14 +324,12 @@ pub fn test_llvm_callback() {
 
     let main_fun_val = module.add_function("main", &main_ty);
 
-    // add global and use SetExternallyInitialized
+    // add global and set externally initialized
     
     let add_arg_tys = [&int_ty, &int_ty];
     let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
     let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
-    unsafe {
-        LLVMSetExternallyInitialized(add_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&add_fun_glbl, true);
     let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
 
     let print_ln_arg_tys = [];
@@ -341,9 +339,7 @@ pub fn test_llvm_callback() {
         "print_ln",
         &print_ln_fun_ty
     );
-    unsafe {
-        LLVMSetExternallyInitialized(print_ln_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&print_ln_fun_glbl, true);
     let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
 
     let print_int_arg_tys = [&int_ty];
@@ -353,9 +349,7 @@ pub fn test_llvm_callback() {
         "print_int",
         &print_int_fun_ty
     );
-    unsafe {
-        LLVMSetExternallyInitialized(print_int_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&print_int_fun_glbl, true);
     let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
 
     // Add basic block to main function
@@ -480,9 +474,7 @@ pub fn test_llvm_callback2() {
     let add_arg_tys = [&int_ty, &int_ty];
     let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
     let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
-    unsafe {
-        LLVMSetExternallyInitialized(add_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&add_fun_glbl, true);
     let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
 
     let print_ln_arg_tys = [];
@@ -492,9 +484,7 @@ pub fn test_llvm_callback2() {
         "print_ln",
         &print_ln_fun_ty
     );
-    unsafe {
-        LLVMSetExternallyInitialized(print_ln_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&print_ln_fun_glbl, true);
     let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
 
     let print_int_arg_tys = [&int_ty];
@@ -504,9 +494,7 @@ pub fn test_llvm_callback2() {
         "print_int",
         &print_int_fun_ty
     );
-    unsafe {
-        LLVMSetExternallyInitialized(print_int_fun_glbl.to_ref(), 1);
-    };
+    llvm::set_externally_initialized(&print_int_fun_glbl, true);
     let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
 
     // Add basic block to main function
