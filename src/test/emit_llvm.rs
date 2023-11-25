@@ -1,10 +1,16 @@
-use crate::emit_llvm::{BasicBlock, Builder, Constant, Context, ExecutionEngine,
-    Global, Module, /* RefOwner, */ Type, llvm_init };
+#![allow(unused_variables)] // FIXME
+
+use crate::emit_llvm::{BasicBlock, Builder, Constant, Context,
+    ExecutionEngine, Global, LLJITBuilder, Module, RefOwner, Type,
+    llvm_init, Value,
+    ThreadSafeContext, ThreadSafeModule,
+    // LLJIT,
+ };
 extern crate llvm_sys;
 
 
 //use llvm_sys::core::{LLVMConstInt};
-use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd, LLVMContextCreate};
+use llvm_sys::core::{LLVMModuleCreateWithNameInContext, LLVMAddGlobal, LLVMDoubleTypeInContext, LLVMArrayType, LLVMSetGlobalConstant, LLVMSetInitializer, LLVMDumpModule, LLVMIntTypeInContext, LLVMFunctionType, LLVMAddFunction, LLVMAppendBasicBlockInContext, LLVMCreateBuilderInContext, LLVMPositionBuilderAtEnd, LLVMGetParam, LLVMBuildAdd, LLVMContextCreate, LLVMSetExternallyInitialized};
 /*, LLVMStructTypeInContext, */
 use llvm_sys::core::LLVMGetGlobalContext;
 //use llvm_sys::core::{LLVMModuleCreateWithName};
@@ -12,9 +18,11 @@ use llvm_sys::core::LLVMGetGlobalContext;
 use llvm_sys::execution_engine::{LLVMExecutionEngineRef, LLVMCreateExecutionEngineForModule, LLVMLinkInMCJIT, LLVMGetFunctionAddress, LLVMGetGlobalValueAddress};
 //use llvm_sys::prelude::LLVMBool;
 use llvm_sys::core::{LLVMConstReal, LLVMConstArray};
+//use llvm_sys::object::LLVMGetSymbolAddress;
 use llvm_sys::prelude::LLVMValueRef;
 //use llvm_sys::LLVMValue;
 
+use llvm_sys::support::LLVMAddSymbol;
 //use llvm_sys::target::{LLVM_InitializeNativeAsmParser};
 use llvm_sys::target::{LLVM_InitializeNativeTarget, LLVM_InitializeNativeAsmPrinter};
 
@@ -257,6 +265,8 @@ pub fn test_llvm_module5() {
     // // create builder & add instructions
     let builder = Builder::create_builder_in_context(&context);
 
+    // call setName for each arg?
+
     builder.position_builder_at_end(&fun_bb);
     let arg0 = fun_val.get_param(0);
     let arg1 = fun_val.get_param(1);
@@ -277,6 +287,308 @@ pub fn test_llvm_module5() {
     println!("Addr for f: {:?}", f_addr);
     let res = f(1, 2);
     println!("f(1,2) = : {:?}", res);
+
+    module.dump();
+}
+
+
+#[no_mangle]
+pub extern "C" fn min_caml_test_add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_test_print_int(x: i32) {
+    print!("{}", x)
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_test_print_ln() {
+    println!()
+}
+
+// Now targeting src/test/ml/print.ml as minimal first module
+
+#[test]
+pub fn test_llvm_callback() {
+    let context = Context::new();
+    let mut module = Module::create_with_name_in_context("test_mod6", &context);
+
+
+    // Main function
+    let void_ty = Type::void_type_in_context(&context);
+    let int_ty = Type::int32_type_in_context(&context);
+    let main_arg_tys = [&void_ty];
+    let main_ty = Type::function_type(&int_ty, &main_arg_tys);
+
+    let main_fun_val = module.add_function("main", &main_ty);
+
+    // add global and use SetExternallyInitialized
+    
+    let add_arg_tys = [&int_ty, &int_ty];
+    let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
+    let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
+    unsafe {
+        LLVMSetExternallyInitialized(add_fun_glbl.to_ref(), 1);
+    };
+    let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
+
+    let print_ln_arg_tys = [];
+    let print_ln_fun_ty = Type::function_type(&void_ty, &print_ln_arg_tys);
+    let print_ln_fun_glbl = Global::add_to_module(
+        &module,
+        "print_ln",
+        &print_ln_fun_ty
+    );
+    unsafe {
+        LLVMSetExternallyInitialized(print_ln_fun_glbl.to_ref(), 1);
+    };
+    let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
+
+    let print_int_arg_tys = [&int_ty];
+    let print_int_fun_ty = Type::function_type(&void_ty, &print_int_arg_tys);
+    let print_int_fun_glbl = Global::add_to_module(
+        &module,
+        "print_int",
+        &print_int_fun_ty
+    );
+    unsafe {
+        LLVMSetExternallyInitialized(print_int_fun_glbl.to_ref(), 1);
+    };
+    let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
+
+    // Add basic block to main function
+    let fun_bb = BasicBlock::append_basic_block_in_context(
+        &context, &main_fun_val, "entry",
+    );
+
+    // // create builder & add instructions
+    let builder = Builder::create_builder_in_context(&context);
+
+    // call setName for each arg?
+
+    builder.position_builder_at_end(&fun_bb);
+    // let arg0 = main_fun_val.get_param(0);
+    // let arg1 = main_fun_val.get_param(1);
+    // let tmp = builder.add(&arg0, &arg1, "tmp");
+    // let _ = builder.ret(&tmp);
+    let zero_c = Constant::int(&int_ty, 0);
+    let zero = Value::from_ref(zero_c.to_ref(), true);
+    let _ = builder.call2(
+        &print_ln_fun_ty,
+        &print_ln_fun_val,
+        &[],
+        "");
+    let _ = builder.call2(
+        &print_int_fun_ty,
+        &print_int_fun_val,
+        &[&zero],
+        "");
+    let _ = builder.call2(
+        &print_ln_fun_ty,
+        &print_ln_fun_val,
+        &[],
+        "");
+    let _ = builder.ret(&zero);
+
+    println!();
+    module.dump();
+
+
+    llvm_init();
+
+    // Create LLJIT
+    let builder = LLJITBuilder::new();
+    let jit = builder.create();
+
+    // Create ExecutionSession
+    //let es = jit.get_execution_session();
+
+    //let ee = ExecutionEngine::for_module(&mut module);
+
+    // Add local process symbols
+    let add_addr = min_caml_test_add as *const core::ffi::c_void as u64;
+    let print_ln_addr =
+        min_caml_test_print_ln as *const core::ffi::c_void as u64;
+    let print_int_addr =
+        min_caml_test_print_int as *const core::ffi::c_void as u64;
+
+    println!("Addr for min_caml_test_add: {:#X}", add_addr);
+    println!("Addr for min_caml_test_print_ln: {:#X}", print_ln_addr);
+    println!("Addr for min_caml_test_print_int: {:#X}", print_int_addr);
+
+    let jd = jit.get_main_jit_dylib();
+    jd.define(&jit, &[
+        ("add", add_addr),
+        ("print_ln", print_ln_addr),
+        ("print_int", print_int_addr),
+        ]);
+
+    let add_addr_2 = jit.lookup("add");
+    let print_ln_2 = jit.lookup("print_ln");
+    let print_int_2 = jit.lookup("print_int");
+
+    println!("Addr for `add` from JIT: {:#X}", add_addr_2);
+    println!("Addr for `print_ln` from JIT: {:#X}", print_ln_2);
+    println!("Addr for `print_int` from JIT: {:#X}", print_int_2);
+
+    let mut tsc = ThreadSafeContext::new();
+    let mut tsm = ThreadSafeModule::new(&module, &tsc);
+    tsc.release(); // FIXME: above should take ownership
+    //module.release();
+
+    // Note: module.dump(); breaks here
+    // ThreadSafeModule:new() takes ownership and leaves module in
+    // uninitialised state.
+    // Need to use LLVMOrcThreadSafeModuleWithModuleDo
+    // to access the module
+
+    let jd = jit.get_main_jit_dylib();
+    jit.add_ir_module(&jd, &tsm);
+    tsm.release(); // FIXME: above should take ownership
+
+    let main_addr = jit.lookup("main");
+    let main = unsafe {
+        let main: extern "C" fn( () ) -> i32 = std::mem::transmute(main_addr);
+        main
+    };
+    println!("Addr for main: {:#X}", main_addr);
+    let res = main( () );
+    println!("main( () ) = : {:?}", res);
+}
+
+
+
+#[test]
+pub fn test_llvm_callback2() {
+
+    let context = Context::new();
+    let mut module = Module::create_with_name_in_context("test_mod7", &context);
+
+
+    // Main function
+    let void_ty = Type::void_type_in_context(&context);
+    let int_ty = Type::int32_type_in_context(&context);
+    let main_arg_tys = [&void_ty];
+    let main_ty = Type::function_type(&int_ty, &main_arg_tys);
+
+    let main_fun_val = module.add_function("main", &main_ty);
+
+    // add global and use SetExternallyInitialized
+    
+    let add_arg_tys = [&int_ty, &int_ty];
+    let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
+    let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
+    unsafe {
+        LLVMSetExternallyInitialized(add_fun_glbl.to_ref(), 1);
+    };
+    let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
+
+    let print_ln_arg_tys = [];
+    let print_ln_fun_ty = Type::function_type(&void_ty, &print_ln_arg_tys);
+    let print_ln_fun_glbl = Global::add_to_module(
+        &module,
+        "print_ln",
+        &print_ln_fun_ty
+    );
+    unsafe {
+        LLVMSetExternallyInitialized(print_ln_fun_glbl.to_ref(), 1);
+    };
+    let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
+
+    let print_int_arg_tys = [&int_ty];
+    let print_int_fun_ty = Type::function_type(&void_ty, &print_int_arg_tys);
+    let print_int_fun_glbl = Global::add_to_module(
+        &module,
+        "print_int",
+        &print_int_fun_ty
+    );
+    unsafe {
+        LLVMSetExternallyInitialized(print_int_fun_glbl.to_ref(), 1);
+    };
+    let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
+
+    // Add basic block to main function
+    let fun_bb = BasicBlock::append_basic_block_in_context(
+        &context, &main_fun_val, "entry",
+    );
+
+    // // create builder & add instructions
+    let builder = Builder::create_builder_in_context(&context);
+
+    // call setName for each arg?
+
+    builder.position_builder_at_end(&fun_bb);
+    let zero_c = Constant::int(&int_ty, 0);
+    let zero = Value::from_ref(zero_c.to_ref(), true);
+    let _ = builder.call2(
+        &print_ln_fun_ty,
+        &print_ln_fun_val,
+        &[],
+        "");
+    let _ = builder.call2(
+        &print_int_fun_ty,
+        &print_int_fun_val,
+        &[&zero],
+        "");
+    let _ = builder.call2(
+        &print_ln_fun_ty,
+        &print_ln_fun_val,
+        &[],
+        "");
+    let _ = builder.ret(&zero);
+
+    println!();
+    module.dump();
+
+    llvm_init();
+
+    let ee = ExecutionEngine::for_module(&mut module);
+
+    // Add local process symbols
+    let add_addr = min_caml_test_add as *const core::ffi::c_void as u64;
+    let print_ln_addr =
+        min_caml_test_print_ln as *const core::ffi::c_void as u64;
+    let print_int_addr =
+        min_caml_test_print_int as *const core::ffi::c_void as u64;
+
+    println!("Addr for min_caml_test_add: {:#X}", add_addr);
+    println!("Addr for min_caml_test_print_ln: {:#X}", print_ln_addr);
+    println!("Addr for min_caml_test_print_int: {:#X}", print_int_addr);
+
+    unsafe {
+        let name = std::ffi::CString::new("add").unwrap();
+        LLVMAddSymbol(name.as_ptr(), add_addr as *mut libc::c_void);
+    }
+
+    unsafe {
+        let name = std::ffi::CString::new("print_ln").unwrap();
+        LLVMAddSymbol(name.as_ptr(), print_ln_addr as *mut libc::c_void);
+    }
+
+    unsafe {
+        let name = std::ffi::CString::new("print_int").unwrap();
+        LLVMAddSymbol(name.as_ptr(), print_int_addr as *mut libc::c_void);
+    }
+
+    // FIXME: try iterating over symbols
+    //let add_addr_2 = ee.function_address("add");
+    //let add_addr_2 = ee.global_value_address("add");
+    // let print_ln_2 = jit.lookup("print_ln");
+    // let print_int_2 = jit.lookup("print_int");
+
+    //println!("Addr for `add` from JIT: {:#X}", add_addr_2);
+    // println!("Addr for `print_ln` from JIT: {:#X}", print_ln_2);
+    // println!("Addr for `print_int` from JIT: {:#X}", print_int_2);
+
+    let main_addr = ee.function_address("main");
+    let main = unsafe {
+        let main: extern "C" fn( () ) -> i32 = std::mem::transmute(main_addr);
+        main
+    };
+    println!("Addr for main: {:#X}", main_addr);
+    let res = main( () );
+    println!("main( () ) = : {:?}", res);
 
     module.dump();
 }

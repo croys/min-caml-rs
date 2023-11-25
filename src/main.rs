@@ -211,7 +211,7 @@ fn main() {
                 return;
             }
             if args.stage == Stage::LLVM {
-                emit_llvm::f(&vmcode);
+                emit_llvm::f(&closure);
             }
         })
         .unwrap();
