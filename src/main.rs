@@ -20,6 +20,7 @@ mod id;
 mod interp;
 mod k_normal;
 mod lexer;
+mod llvm;
 mod parser;
 mod syntax;
 mod ty;
