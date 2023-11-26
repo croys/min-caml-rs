@@ -106,6 +106,8 @@ fn to_basic_blocks(p: &asm::T, b: &mut Vec<Inst>) -> Vec<BBlock> {
     todo!()
 }
 
+type GlobalMap = HashMap<id::L, (llvm::Global, llvm::Type, ty::Type)>;
+
 // Just generate list of instructions initially, then create basic blocks
 // after this?
 
@@ -117,10 +119,12 @@ fn to_basic_blocks(p: &asm::T, b: &mut Vec<Inst>) -> Vec<BBlock> {
 // FIXME: map from ids to values
 // FIXME: value name or use empty name?
 fn exp_to_llvm(
+    globals: &GlobalMap,
     ctx: &llvm::Context,
     fun: &llvm::Value,
     bblock: &llvm::BasicBlock,
     builder: &llvm::Builder,
+    vals: &mut HashMap<id::T, llvm::Value>,
     e: &asm::Exp,
 ) -> llvm::Value {
     fn to_val(c: &mut llvm::Constant) -> llvm::Value {
@@ -129,7 +133,12 @@ fn exp_to_llvm(
         x
     }
 
+    fn id_or_imm_to_value() -> llvm::Value {
+        todo!()
+    }
+
     use asm::Exp::*;
+    eprintln!("Exp: {:?}", e);
     match e {
         // FIXME: call to llvm.donothing()?
         Nop => to_val(&mut llvm::Constant::int(
@@ -145,17 +154,54 @@ fn exp_to_llvm(
         {
             todo!()
         }
-        Mov(ref n) => todo!(),
-        Neg(ref n) => todo!(),
-        _ => todo!(),
+        // Mov(ref n) => todo!(),
+        Neg(ref id) => {
+            let val = vals
+                .get(id)
+                .unwrap_or_else(|| panic!("No value '{}'", id.0));
+            builder.neg(val, "")
+        }
+        Add(ref x, ref y) => {
+            let x_ =
+                vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
+            // let y_  = vals.get(y)
+            //     .unwrap_or_else(|| panic!("No value '{:?}'", y));
+            // builder.add(&x_, &y_, "")
+            llvm::Value::from_ref(x_.to_ref(), false)
+        }
+        CallDir(id, args, fargs) => {
+            // get global for label
+            let (fun_glbl, fun_ty, _) = globals
+                .get(id)
+                .unwrap_or_else(|| panic!("No global '{}'", id.0));
+            // get values for args
+            let mut args_: Vec<&llvm::Value> = vec![];
+            for arg in args {
+                args_.push(
+                    vals.get(arg)
+                        .unwrap_or_else(|| panic!("No value '{}'", arg.0)),
+                );
+            }
+            // FIXME: fargs
+            let f = llvm::Value::from_ref(fun_glbl.to_ref(), false);
+            eprintln!("call2 for {}", id.0);
+            builder.call2(fun_ty, &f, &args_, "")
+        }
+        _ => {
+            println!("Not done: {:?}", e);
+            todo!()
+        }
     }
 }
 
+// FIXME: need globals map too...
 fn to_llvm(
+    globals: &GlobalMap,
     ctx: &llvm::Context,
     fun: &llvm::Value,
     bblock: &llvm::BasicBlock,
     builder: &llvm::Builder,
+    vals: &mut HashMap<id::T, llvm::Value>,
     p: &asm::T,
 ) {
     // need to maintain id -> value map
@@ -163,11 +209,37 @@ fn to_llvm(
     // need last inst flag to generate ret
 
     match p {
-        asm::T::Ans(ref e) => todo!(),
+        asm::T::Ans(ref e) => {
+            // FIXME: retVoid based on type...
+            let val = exp_to_llvm(globals, ctx, fun, bblock, builder, vals, e);
+            // give temp name to val
+            let id = id::genid(&id::T(String::from(".ans")));
+            val.set_name(id.0.as_str());
+            builder.ret(&val);
+        }
         asm::T::Let((ref id, ref ty), ref e, ref t) => {
-            todo!()
+            // FIXME: might need fresh fun, bblock, etc..
+            let val = exp_to_llvm(globals, ctx, fun, bblock, builder, vals, e);
+            // use an alias?
+            eprintln!("Setting name to {}", id.0.as_str());
+            val.set_name(id.0.as_str());
+            // add to map
+            vals.insert(id.clone(), val);
+            to_llvm(globals, ctx, fun, bblock, builder, vals, t)
         }
     }
+}
+
+// Runtime functions
+
+#[no_mangle]
+pub extern "C" fn min_caml_print_int(x: i32) {
+    print!("{}", x)
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_print_newline() {
+    println!()
 }
 
 #[allow(unused_variables)]
@@ -184,7 +256,7 @@ pub fn f(p: &closure::Prog) {
 
     // Keep a map from labels to values
 
-    let mut globals = HashMap::<id::L, llvm::Global>::new();
+    let mut globals = GlobalMap::new();
 
     for (ref id, ref x) in floats {
         println!("Adding float const: {} = {}", id.0, x);
@@ -193,7 +265,14 @@ pub fn f(p: &closure::Prog) {
         let global_val =
             llvm::Global::add_to_module(&module, id.0.as_str(), &double_ty);
         global_val.set_constant(&mut const_val);
-        globals.insert(id.clone(), global_val);
+        globals.insert(
+            id.clone(),
+            (
+                global_val,
+                llvm::Type::double_type_in_context(&ctx),
+                ty::Type::Float,
+            ),
+        );
 
         // FIXME: set names?
 
@@ -232,6 +311,36 @@ pub fn f(p: &closure::Prog) {
     // labels
 
     // FIXME: allocate global variables (min_caml_hp)
+
+    // FIXME: Add symbols for runtime
+
+    // FIXME: Need to add globals first, then define symbols are ee is created?
+
+    llvm::llvm_init();
+
+    let runtime_functions = vec![
+        (
+            "min_caml_print_int",
+            ty::Type::Fun(vec![ty::Type::Int], Box::new(ty::Type::Unit)),
+            min_caml_print_int as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_print_newline",
+            ty::Type::Fun(vec![], Box::new(ty::Type::Unit)),
+            min_caml_print_newline as *const core::ffi::c_void,
+        ),
+    ];
+
+    // FIXME: need to split ty args
+    for (name, ty, ptr) in runtime_functions {
+        let ty_ = ty_to_type_in_context(&ctx, &ty);
+        let glbl = llvm::Global::add_to_module(&module, name, &ty_);
+        llvm::set_externally_initialized(&glbl, true);
+        llvm::add_symbol(name, ptr);
+
+        // add to globals map...
+        globals.insert(id::L(name.to_string()), (glbl, ty_, ty.clone()));
+    }
 
     // fundefs
 
@@ -289,9 +398,44 @@ pub fn f(p: &closure::Prog) {
         let f_ty_ = ty_to_type_in_context(&ctx, &split_ty_args(f_ty));
 
         let fun_val = module.add_function(name.0.as_str(), &f_ty_);
+
+        // FIXME: generate instructions...
     }
 
+    // Generate instructions for top level expression
+    let void_ty = llvm::Type::void_type_in_context(&ctx);
+    let int_ty = llvm::Type::int32_type_in_context(&ctx);
+    let main_arg_tys = [&void_ty];
+    //let main_ty = llvm::Type::function_type(&int_ty, &main_arg_tys);
+    let main_ty = llvm::Type::function_type(&void_ty, &main_arg_tys);
+    let main_val = module.add_function("_main", &main_ty);
+
+    let main_bb = llvm::BasicBlock::append_basic_block_in_context(
+        &ctx, &main_val, "entry",
+    );
+
+    let builder = llvm::Builder::create_builder_in_context(&ctx);
+
+    builder.position_builder_at_end(&main_bb);
+
+    let mut vals = std::collections::HashMap::<id::T, llvm::Value>::new();
+    to_llvm(&globals, &ctx, &main_val, &main_bb, &builder, &mut vals, &c);
+
+    // FIXME: need Debug for everything...
+    //println!("Globals: {:?}", globals);
     module.dump();
+
+    let ee = llvm::ExecutionEngine::for_module(&mut module);
+
+    // FIXME: check result...
+    let main_addr = ee.function_address("_main");
+    let main = unsafe {
+        let main: extern "C" fn(()) -> () = std::mem::transmute(main_addr);
+        main
+    };
+    println!("Addr for main: {:#X}", main_addr);
+    main(());
+    println!();
 
     /*
         Notes:

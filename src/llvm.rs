@@ -11,9 +11,11 @@ use crate::ty;
 
 extern crate llvm_sys;
 
+use llvm_sys::core::LLVMAddAlias2;
 use llvm_sys::core::LLVMAddFunction;
 use llvm_sys::core::LLVMAppendBasicBlockInContext;
 use llvm_sys::core::LLVMBuildCall2;
+use llvm_sys::core::LLVMBuildNeg;
 use llvm_sys::core::LLVMCreateBuilderInContext;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMVoidType;
@@ -414,6 +416,17 @@ impl Value {
         let val = unsafe { LLVMGetParam(self.to_ref(), n_) };
         Value { val, owned: false }
     }
+
+    pub fn set_name(&self, name: &str) {
+        let name_ = std::ffi::CString::new(name).expect("unable to create id");
+        unsafe {
+            llvm_sys::core::LLVMSetValueName2(
+                self.val,
+                name_.as_ptr(),
+                name.len(),
+            )
+        }
+    }
 }
 
 // FIXME: wrap up basic block
@@ -495,6 +508,18 @@ impl Builder {
                 self.to_ref(),
                 lhs.to_ref(),
                 rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn neg(&self, val: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildNeg(
+                self.to_ref(),
+                val.to_ref(),
                 name_.as_ptr() as *const c_char,
             )
         };
