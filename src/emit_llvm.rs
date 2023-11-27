@@ -107,7 +107,7 @@ fn to_basic_blocks(p: &asm::T, b: &mut Vec<Inst>) -> Vec<BBlock> {
     todo!()
 }
 
-type GlobalMap = HashMap<id::L, (llvm::Global, llvm::Type, ty::Type)>;
+type GlobalMap = HashMap<id::L, (llvm::Value, llvm::Type, ty::Type)>;
 
 // Just generate list of instructions initially, then create basic blocks
 // after this?
@@ -128,15 +128,6 @@ fn exp_to_llvm(
     vals: &mut HashMap<id::T, llvm::Value>,
     e: &asm::Exp,
 ) -> llvm::Value {
-    // FIXME: all lookups should check globals first, to
-    // deal with min_caml_hp
-
-    fn to_val(c: &mut llvm::Constant) -> llvm::Value {
-        let x = llvm::Value::from_ref(c.to_ref(), c.is_owned());
-        c.release();
-        x
-    }
-
     fn get_val(
         globals: &GlobalMap,
         builder: &llvm::Builder,
@@ -167,7 +158,7 @@ fn exp_to_llvm(
             asm::IdOrImm::V(ref id) => get_val(globals, builder, vals, id),
             asm::IdOrImm::C(x) => {
                 let int_ty = llvm::Type::int32_type_in_context(ctx);
-                to_val(&mut llvm::Constant::int(&int_ty, *x))
+                llvm::constant::int(&int_ty, *x)
             }
         }
     }
@@ -176,14 +167,10 @@ fn exp_to_llvm(
     eprintln!("Exp: {:?}", e);
     match e {
         // FIXME: call to llvm.donothing()?
-        Nop => to_val(&mut llvm::Constant::int(
-            &llvm::Type::int32_type_in_context(ctx),
-            0,
-        )),
-        Set(x) => to_val(&mut llvm::Constant::int(
-            &llvm::Type::int32_type_in_context(ctx),
-            *x,
-        )),
+        Nop => llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0),
+        Set(x) => {
+            llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), *x)
+        }
         SetL(ref l) =>
         // simple look up global value
         {
@@ -193,37 +180,17 @@ fn exp_to_llvm(
             let ptr = &Value::from_ref(glbl.to_ref(), false);
             builder.load2(ty, ptr, "")
         }
-        Mov(ref id) => {
-            // let val = vals.get(id);
-            // match val {
-            //     Some(ref val) => todo!(),
-            //     None => {
-            //         let (glbl, ty, _) = globals.get(&id::L(id.0.clone()))
-            //             .unwrap_or_else(|| panic!("No value '{}'", id.0));
-            //         let ptr = &Value::from_ref(glbl.to_ref(), false);
-            //         builder.load2(ty, ptr, "")
-            //     }
-            // }
-            get_val(globals, builder, vals, id)
-        }
+        Mov(ref id) => get_val(globals, builder, vals, id),
         Neg(ref id) => {
             let val = get_val(globals, builder, vals, id);
             builder.neg(&val, "")
-            // let val = vals
-            //     .get(id)
-            //     .unwrap_or_else(|| panic!("No value '{}'", id.0));
-            // builder.neg(val, "")
         }
         Add(ref x, ref y) => {
-            // let x_ =
-            //     vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
             let x_ = get_val(globals, builder, vals, x);
             let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
             builder.add(&x_, &y_, "")
         }
         Sub(ref x, ref y) => {
-            // let x_ =
-            //     vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
             let x_ = get_val(globals, builder, vals, x);
             let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
             builder.sub(&x_, &y_, "")
@@ -333,9 +300,8 @@ pub fn f(p: &closure::Prog) {
     for (ref id, ref x) in floats {
         println!("Adding float const: {} = {}", id.0, x);
 
-        let mut const_val = llvm::Constant::real(&double_ty, *x);
-        let global_val =
-            llvm::Global::add_to_module(&module, id.0.as_str(), &double_ty);
+        let mut const_val = llvm::constant::real(&double_ty, *x);
+        let global_val = module.add_global(id.0.as_str(), &double_ty);
         global_val.set_constant(&mut const_val);
         globals.insert(
             id.clone(),
@@ -346,22 +312,6 @@ pub fn f(p: &closure::Prog) {
             ),
         );
 
-        // FIXME: set names?
-
-        // unsafe {
-        //     let name = std::ffi::CString::new(id.0.as_str())
-        //         .expect("unable to create id");
-        //     // llvm_sys::core::LLVMSetValueName2(
-        //     //     val, id.0.as_ptr() as *const i8, 8);
-        //     llvm_sys::core::LLVMSetValueName2(
-        //         val,
-        //         name.into_raw() as *const i8,
-        //         8,
-        //     );
-        //     LLVMDumpValue(val);
-        //     println!();
-        // }
-
         // let str = unsafe {
         //     let buf = LLVMPrintValueToString(val);
         //     let cstr_buf = std::ffi::CStr::from_ptr(buf);
@@ -369,16 +319,6 @@ pub fn f(p: &closure::Prog) {
         //     LLVMDisposeMessage(buf);
         //     res
         // };
-
-        // let name = unsafe {
-        //     let mut sz: usize = 128;
-        //     let buf = LLVMGetValueName2(val, &mut sz);
-        //     let cstr_buf = std::ffi::CStr::from_ptr(buf);
-        //     let res = String::from_utf8_lossy(cstr_buf.to_bytes()).into_owned();
-        //     //LLVMDisposeMessage(buf);
-        //     res
-        // };
-        // println!("str = {}, name = {}", str, name);
     }
     // labels
 
@@ -406,7 +346,7 @@ pub fn f(p: &closure::Prog) {
     // FIXME: need to split ty args
     for (name, ty, ptr) in runtime_functions {
         let ty_ = ty_to_type_in_context(&ctx, &ty);
-        let glbl = llvm::Global::add_to_module(&module, name, &ty_);
+        let glbl = module.add_global(name, &ty_);
         llvm::set_externally_initialized(&glbl, true);
         llvm::add_symbol(name, ptr);
 
@@ -481,8 +421,7 @@ pub fn f(p: &closure::Prog) {
 
     // Add min_caml_hp as an external, so that we can easily observe it later
     let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-    let min_caml_hp_glbl =
-        llvm::Global::add_to_module(&module, "min_caml_hp", &void_ptr_ty);
+    let min_caml_hp_glbl = module.add_global("min_caml_hp", &void_ptr_ty);
     llvm::set_externally_initialized(&min_caml_hp_glbl, true);
 
     // allocate memory

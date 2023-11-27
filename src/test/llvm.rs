@@ -1,9 +1,9 @@
 #![allow(unused_variables)] // FIXME
 
 use crate::llvm;
-use crate::llvm::{BasicBlock, Builder, Constant, Context,
-    ExecutionEngine, Global, LLJITBuilder, Module, RefOwner, Type,
-    llvm_init, Value,
+use crate::llvm::{BasicBlock, Builder, Context,
+    ExecutionEngine, LLJITBuilder, Module, RefOwner, Type,
+    llvm_init,
     ThreadSafeContext, ThreadSafeModule,
     // LLJIT,
  };
@@ -215,16 +215,14 @@ pub fn test_llvm_module4() {
 
     // FIXME: test array of arrays
 
-    let x_0 = Constant::real(&double_ty, 1.61);
-    let x_1 = Constant::real(&double_ty, 3.22);
+    let x_0 = llvm::constant::real(&double_ty, 1.61);
+    let x_1 = llvm::constant::real(&double_ty, 3.22);
     // FIXME: not sure if array takes ownership.
     // need to look at LLVM source and/or
     // investigate via explicit drop/dispose
-    let mut arr = Constant::array(&double_ty, &[&x_0, &x_1]);
+    let mut arr = llvm::constant::array(&double_ty, &[&x_0, &x_1]);
 
-    let global_var =
-        Global::add_to_module(&module, "dbl_arr", &array_double_ty);
-
+    let global_var = module.add_global("dbl_arr", &array_double_ty);
     global_var.set_constant(&mut arr);
 
     module.dump();
@@ -328,29 +326,18 @@ pub fn test_llvm_callback() {
     
     let add_arg_tys = [&int_ty, &int_ty];
     let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
-    let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
+    let add_fun_glbl = module.add_global("add", &add_fun_ty);
     llvm::set_externally_initialized(&add_fun_glbl, true);
-    let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
 
     let print_ln_arg_tys = [];
     let print_ln_fun_ty = Type::function_type(&void_ty, &print_ln_arg_tys);
-    let print_ln_fun_glbl = Global::add_to_module(
-        &module,
-        "print_ln",
-        &print_ln_fun_ty
-    );
+    let print_ln_fun_glbl = module.add_global("print_ln", &print_ln_fun_ty);
     llvm::set_externally_initialized(&print_ln_fun_glbl, true);
-    let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
 
     let print_int_arg_tys = [&int_ty];
     let print_int_fun_ty = Type::function_type(&void_ty, &print_int_arg_tys);
-    let print_int_fun_glbl = Global::add_to_module(
-        &module,
-        "print_int",
-        &print_int_fun_ty
-    );
+    let print_int_fun_glbl = module.add_global("print_int", &print_int_fun_ty);
     llvm::set_externally_initialized(&print_int_fun_glbl, true);
-    let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
 
     // Add basic block to main function
     let fun_bb = BasicBlock::append_basic_block_in_context(
@@ -367,21 +354,20 @@ pub fn test_llvm_callback() {
     // let arg1 = main_fun_val.get_param(1);
     // let tmp = builder.add(&arg0, &arg1, "tmp");
     // let _ = builder.ret(&tmp);
-    let zero_c = Constant::int(&int_ty, 0);
-    let zero = Value::from_ref(zero_c.to_ref(), true);
+    let zero = llvm::constant::int(&int_ty, 0);
     let _ = builder.call2(
         &print_ln_fun_ty,
-        &print_ln_fun_val,
+        &print_ln_fun_glbl,
         &[],
         "");
     let _ = builder.call2(
         &print_int_fun_ty,
-        &print_int_fun_val,
+        &print_int_fun_glbl,
         &[&zero],
         "");
     let _ = builder.call2(
         &print_ln_fun_ty,
-        &print_ln_fun_val,
+        &print_ln_fun_glbl,
         &[],
         "");
     let _ = builder.ret(&zero);
@@ -473,29 +459,18 @@ pub fn test_llvm_callback2() {
     
     let add_arg_tys = [&int_ty, &int_ty];
     let add_fun_ty = Type::function_type(&int_ty, &add_arg_tys);
-    let add_fun_glbl = Global::add_to_module(&module, "add", &add_fun_ty);
+    let add_fun_glbl = module.add_global("add", &add_fun_ty);
     llvm::set_externally_initialized(&add_fun_glbl, true);
-    let add_fun_val = Value::from_ref(add_fun_glbl.to_ref(), false);
 
     let print_ln_arg_tys = [];
     let print_ln_fun_ty = Type::function_type(&void_ty, &print_ln_arg_tys);
-    let print_ln_fun_glbl = Global::add_to_module(
-        &module,
-        "print_ln",
-        &print_ln_fun_ty
-    );
+    let print_ln_fun_glbl = module.add_global("print_ln", &print_ln_fun_ty);
     llvm::set_externally_initialized(&print_ln_fun_glbl, true);
-    let print_ln_fun_val = Value::from_ref(print_ln_fun_glbl.to_ref(), false);
 
     let print_int_arg_tys = [&int_ty];
     let print_int_fun_ty = Type::function_type(&void_ty, &print_int_arg_tys);
-    let print_int_fun_glbl = Global::add_to_module(
-        &module,
-        "print_int",
-        &print_int_fun_ty
-    );
+    let print_int_fun_glbl = module.add_global("print_int", &print_int_fun_ty);
     llvm::set_externally_initialized(&print_int_fun_glbl, true);
-    let print_int_fun_val = Value::from_ref(print_int_fun_glbl.to_ref(), false);
 
     // Add basic block to main function
     let fun_bb = BasicBlock::append_basic_block_in_context(
@@ -508,21 +483,20 @@ pub fn test_llvm_callback2() {
     // call setName for each arg?
 
     builder.position_builder_at_end(&fun_bb);
-    let zero_c = Constant::int(&int_ty, 0);
-    let zero = Value::from_ref(zero_c.to_ref(), true);
+    let zero = llvm::constant::int(&int_ty, 0);
     let _ = builder.call2(
         &print_ln_fun_ty,
-        &print_ln_fun_val,
+        &print_ln_fun_glbl,
         &[],
         "");
     let _ = builder.call2(
         &print_int_fun_ty,
-        &print_int_fun_val,
+        &print_int_fun_glbl,
         &[&zero],
         "");
     let _ = builder.call2(
         &print_ln_fun_ty,
-        &print_ln_fun_val,
+        &print_ln_fun_glbl,
         &[],
         "");
     let _ = builder.ret(&zero);
@@ -593,11 +567,8 @@ pub fn test_llvm_global_update() {
     eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
 
     let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-    let min_caml_hp_glbl =
-        llvm::Global::add_to_module(&module, "min_caml_hp", &void_ptr_ty);
+    let min_caml_hp_glbl = module.add_global("min_caml_hp", &void_ptr_ty);
     llvm::set_externally_initialized(&min_caml_hp_glbl, true);
-    let min_caml_hp_val =
-        llvm::Value::from_ref(min_caml_hp_glbl.to_ref(), false);
 
     // Add basic block to main function
     let fun_bb = BasicBlock::append_basic_block_in_context(
@@ -610,16 +581,15 @@ pub fn test_llvm_global_update() {
     // call setName for each arg?
 
     builder.position_builder_at_end(&fun_bb);
-    let const_c = Constant::int(&int_ty, 8);
-    let c_val = Value::from_ref(const_c.to_ref(), true);
+    let const_c = llvm::constant::int(&int_ty, 8);
 
-    let val0 = builder.load2(&void_ptr_ty, &min_caml_hp_val, "");
-    let val1 = builder.add(&val0, &c_val, "");
-    let val2 = builder.store(&val1, &min_caml_hp_val);
-    let val3 = builder.load2(&void_ptr_ty, &min_caml_hp_val, "");
-    let val4 = builder.add(&val3, &c_val, "");
-    let val5 = builder.store(&val4, &min_caml_hp_val);
-    let _ = builder.ret(&c_val);
+    let val0 = builder.load2(&void_ptr_ty, &min_caml_hp_glbl, "");
+    let val1 = builder.add(&val0, &const_c, "");
+    let val2 = builder.store(&val1, &min_caml_hp_glbl);
+    let val3 = builder.load2(&void_ptr_ty, &min_caml_hp_glbl, "");
+    let val4 = builder.add(&val3, &const_c, "");
+    let val5 = builder.store(&val4, &min_caml_hp_glbl);
+    let _ = builder.ret(&const_c);
 
     println!();
     module.dump();

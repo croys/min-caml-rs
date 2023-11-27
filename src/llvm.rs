@@ -181,9 +181,18 @@ impl Module {
         }
     }
 
-    // add global
-    // FIXME: global type maybe not necessary, just use a value
-    // and create here.
+    // module should probably be mut
+    pub fn add_global(&mut self, name: &str, ty: &Type) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMAddGlobal(
+                self.to_ref(),
+                ty.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
 
     pub fn add_function(&mut self, name: &str, ty: &Type) -> Value {
         let name_ = CString::new(name).unwrap();
@@ -304,100 +313,6 @@ impl Type {
     // FIXME: dump
 }
 
-// FIXME: ty::Type -> LLVM type conversion
-
-pub struct Constant {
-    val: LLVMValueRef,
-    owned: bool,
-}
-
-// ValueRefOwner sub-trait?
-
-impl RefOwner<LLVMValueRef> for Constant {
-    fn to_ref(&self) -> LLVMValueRef {
-        self.val
-    }
-
-    // FIXME: push up
-    // FIXME: return self
-    fn release(&mut self) {
-        self.owned = false
-    }
-}
-
-// FIXME: move to Value?
-impl Constant {
-    pub fn is_owned(&self) -> bool {
-        self.owned
-    }
-
-    pub fn int(ty: &Type, x: i32) -> Constant {
-        let val = unsafe { LLVMConstInt(ty.to_ref(), x as u64, 1) };
-        Constant { val, owned: true }
-    }
-
-    pub fn real(ty: &Type, x: f64) -> Constant {
-        let val = unsafe { LLVMConstReal(ty.to_ref(), x) };
-        Constant { val, owned: true }
-    }
-
-    pub fn array(elem_ty: &Type, vals: &[&Constant]) -> Constant {
-        // crete vec of pointers
-        let n: libc::c_uint = vals.len().try_into().unwrap();
-        let mut v: Vec<LLVMValueRef> =
-            vals.iter().map(|x| x.to_ref()).collect();
-        let val =
-            unsafe { LLVMConstArray(elem_ty.to_ref(), v.as_mut_ptr(), n) };
-        Constant { val, owned: true }
-    }
-
-    pub fn dump(&self) {
-        unsafe { LLVMDumpValue(self.val) }
-    }
-}
-
-// FIXME: globals
-
-pub struct Global {
-    val: LLVMValueRef,
-    owned: bool,
-}
-
-impl RefOwner<LLVMValueRef> for Global {
-    fn to_ref(&self) -> LLVMValueRef {
-        self.val
-    }
-
-    // FIXME: push up
-    fn release(&mut self) {
-        self.owned = false
-    }
-}
-
-impl Global {
-    // module should probably be mut
-    pub fn add_to_module(m: &Module, name: &str, ty: &Type) -> Global {
-        let name_ = CString::new(name).unwrap();
-        let val = unsafe {
-            LLVMAddGlobal(
-                m.to_ref(),
-                ty.to_ref(),
-                name_.as_ptr() as *const c_char,
-            )
-        };
-        Global { val, owned: false }
-    }
-
-    // Should maybe consider internal mutability for owned
-    pub fn set_constant(&self, val: &mut Constant) {
-        val.release();
-        unsafe {
-            LLVMSetInitializer(self.to_ref(), val.to_ref());
-            LLVMSetGlobalConstant(self.to_ref(), 1);
-        }
-    }
-}
-
 pub struct Value {
     val: LLVMValueRef,
     owned: bool,
@@ -452,9 +367,44 @@ impl Value {
             }
         }
     }
+
+    // Should maybe consider internal mutability for owned?
+    pub fn set_constant(&self, constant: &mut Value) {
+        constant.release();
+        unsafe {
+            LLVMSetInitializer(self.to_ref(), constant.to_ref());
+            LLVMSetGlobalConstant(self.to_ref(), 1);
+        }
+    }
+
+    pub fn dump(&self) {
+        unsafe { LLVMDumpValue(self.val) }
+    }
 }
 
-// FIXME: wrap up basic block
+pub mod constant {
+    use super::*;
+
+    pub fn int(ty: &Type, x: i32) -> Value {
+        let val = unsafe { LLVMConstInt(ty.to_ref(), x as u64, 1) };
+        Value::from_ref(val, true)
+    }
+
+    pub fn real(ty: &Type, x: f64) -> Value {
+        let val = unsafe { LLVMConstReal(ty.to_ref(), x) };
+        Value::from_ref(val, true)
+    }
+
+    pub fn array(elem_ty: &Type, vals: &[&Value]) -> Value {
+        // crete vec of pointers
+        let n: libc::c_uint = vals.len().try_into().unwrap();
+        let mut v: Vec<LLVMValueRef> =
+            vals.iter().map(|x| x.to_ref()).collect();
+        let val =
+            unsafe { LLVMConstArray(elem_ty.to_ref(), v.as_mut_ptr(), n) };
+        Value::from_ref(val, true)
+    }
+}
 
 pub struct BasicBlock {
     val: LLVMBasicBlockRef,
@@ -714,7 +664,7 @@ pub fn add_symbol(name: &str, ptr: *const core::ffi::c_void) {
     unsafe { LLVMAddSymbol(name_.as_ptr(), addr as *mut libc::c_void) }
 }
 
-pub fn set_externally_initialized(val: &Global, ext: bool) {
+pub fn set_externally_initialized(val: &Value, ext: bool) {
     unsafe {
         LLVMSetExternallyInitialized(val.to_ref(), if ext { 1 } else { 0 })
     }
