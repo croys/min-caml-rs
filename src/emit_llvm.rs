@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)] // FIXME
 
+use llvm_sys::core::LLVMGetParam;
+
 use crate::asm;
 use crate::closure;
 use crate::id;
@@ -354,6 +356,31 @@ pub fn f(p: &closure::Prog) {
         globals.insert(id::L(name.to_string()), (glbl, ty_, ty.clone()));
     }
 
+    let void_ty = llvm::Type::void_type_in_context(&ctx);
+
+    // Add min_caml_hp as an external, so that we can easily observe it later
+    let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+    let min_caml_hp_glbl = module.add_global("min_caml_hp", &void_ptr_ty);
+    llvm::set_externally_initialized(&min_caml_hp_glbl, true);
+
+    // allocate memory
+    // move this to a struct we can shove in an Rc<>
+    // to allow keeping the JIT'd code alive
+    let mut mem = unsafe { libc::malloc(128 * 1024 * 1024) };
+    let min_caml_hp = mem;
+    let min_caml_hp_ptr = &mut mem as *mut *mut libc::c_void;
+    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
+    eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
+
+    llvm::add_symbol("min_caml_hp", min_caml_hp_ptr as *const libc::c_void);
+
+    // add to globals map
+    globals.insert(
+        id::L(String::from("min_caml_hp")),
+        (min_caml_hp_glbl, void_ptr_ty, ty::Type::Int),
+    );
+
+    let mut vals = std::collections::HashMap::<id::T, llvm::Value>::new();
     // fundefs
 
     // Note the conversion to the virtual assembler separates out
@@ -411,35 +438,36 @@ pub fn f(p: &closure::Prog) {
 
         let fun_val = module.add_function(name.0.as_str(), &f_ty_);
 
-        // FIXME: add entry to vals using:
-        // LLVMGetParam(Fn, Index)
+        // set arg names and add entry to vals for each
+        // note - arg names are globally unique, so
+        // no need for nestend environments
+        for (idx, id) in args.iter().chain(fargs.iter()).enumerate() {
+            // FIXME: add get_param to Value
+            let p = unsafe {
+                LLVMGetParam(fun_val.to_ref(), idx.try_into().unwrap())
+            };
+            let p_ = Value::from_ref(p, false);
+            p_.set_name(&id.0);
+            vals.insert(id.clone(), p_);
+        }
 
-        // FIXME: generate instructions...
+        // FIXME: need clone
+        let fun_val2 = Value::from_ref(fun_val.to_ref(), false);
+
+        globals.insert(name.clone(), (fun_val2, f_ty_, f_ty.clone()));
+
+        // new basic block for function
+
+        let fun_bb = llvm::BasicBlock::append_basic_block_in_context(
+            &ctx, &fun_val, "entry",
+        );
+
+        let builder = llvm::Builder::create_builder_in_context(&ctx);
+
+        builder.position_builder_at_end(&fun_bb);
+
+        to_llvm(&globals, &ctx, &fun_val, &fun_bb, &builder, &mut vals, exp);
     }
-
-    let void_ty = llvm::Type::void_type_in_context(&ctx);
-
-    // Add min_caml_hp as an external, so that we can easily observe it later
-    let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-    let min_caml_hp_glbl = module.add_global("min_caml_hp", &void_ptr_ty);
-    llvm::set_externally_initialized(&min_caml_hp_glbl, true);
-
-    // allocate memory
-    // move this to a struct we can shove in an Rc<>
-    // to allow keeping the JIT'd code alive
-    let mut mem = unsafe { libc::malloc(128 * 1024 * 1024) };
-    let min_caml_hp = mem;
-    let min_caml_hp_ptr = &mut mem as *mut *mut libc::c_void;
-    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
-    eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
-
-    llvm::add_symbol("min_caml_hp", min_caml_hp_ptr as *const libc::c_void);
-
-    // add to globals map
-    globals.insert(
-        id::L(String::from("min_caml_hp")),
-        (min_caml_hp_glbl, void_ptr_ty, ty::Type::Int),
-    );
 
     // Generate instructions for top level expression
 
@@ -457,7 +485,6 @@ pub fn f(p: &closure::Prog) {
 
     builder.position_builder_at_end(&main_bb);
 
-    let mut vals = std::collections::HashMap::<id::T, llvm::Value>::new();
     to_llvm(&globals, &ctx, &main_val, &main_bb, &builder, &mut vals, &c);
 
     // FIXME: need Debug for everything...
