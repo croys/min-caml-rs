@@ -52,7 +52,7 @@ possible.
 * LLVM Generation - in progress
 * System library
   * for reference interpreter - mostly done
-  * for LLVM backend
+  * for LLVM backend - in progress
 * Reference interpreter - done
 * REPL
   * for reference interpreter
