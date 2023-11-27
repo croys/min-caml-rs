@@ -6,6 +6,7 @@ use crate::closure;
 use crate::id;
 use crate::llvm;
 use crate::llvm::RefOwner;
+use crate::llvm::Value;
 use crate::r#virtual;
 use crate::ty;
 
@@ -127,14 +128,48 @@ fn exp_to_llvm(
     vals: &mut HashMap<id::T, llvm::Value>,
     e: &asm::Exp,
 ) -> llvm::Value {
+    // FIXME: all lookups should check globals first, to
+    // deal with min_caml_hp
+
     fn to_val(c: &mut llvm::Constant) -> llvm::Value {
         let x = llvm::Value::from_ref(c.to_ref(), c.is_owned());
         c.release();
         x
     }
 
-    fn id_or_imm_to_value() -> llvm::Value {
-        todo!()
+    fn get_val(
+        globals: &GlobalMap,
+        builder: &llvm::Builder,
+        vals: &HashMap<id::T, llvm::Value>,
+        id: &id::T,
+    ) -> Value {
+        let val = vals.get(id);
+        match val {
+            Some(v) => llvm::Value::from_ref(v.to_ref(), false),
+            None => {
+                let (glbl, ty, _) = globals
+                    .get(&id::L(id.0.clone()))
+                    .unwrap_or_else(|| panic!("No value '{}'", id.0));
+                let ptr = &Value::from_ref(glbl.to_ref(), false);
+                builder.load2(ty, ptr, "")
+            }
+        }
+    }
+
+    fn id_or_imm_to_value(
+        ctx: &llvm::Context,
+        globals: &GlobalMap,
+        builder: &llvm::Builder,
+        vals: &HashMap<id::T, llvm::Value>,
+        operand: &asm::IdOrImm,
+    ) -> llvm::Value {
+        match operand {
+            asm::IdOrImm::V(ref id) => get_val(globals, builder, vals, id),
+            asm::IdOrImm::C(x) => {
+                let int_ty = llvm::Type::int32_type_in_context(ctx);
+                to_val(&mut llvm::Constant::int(&int_ty, *x))
+            }
+        }
     }
 
     use asm::Exp::*;
@@ -152,22 +187,46 @@ fn exp_to_llvm(
         SetL(ref l) =>
         // simple look up global value
         {
-            todo!()
+            let (glbl, ty, _) = globals
+                .get(l)
+                .unwrap_or_else(|| panic!("No value '{}'", l.0));
+            let ptr = &Value::from_ref(glbl.to_ref(), false);
+            builder.load2(ty, ptr, "")
         }
-        // Mov(ref n) => todo!(),
+        Mov(ref id) => {
+            // let val = vals.get(id);
+            // match val {
+            //     Some(ref val) => todo!(),
+            //     None => {
+            //         let (glbl, ty, _) = globals.get(&id::L(id.0.clone()))
+            //             .unwrap_or_else(|| panic!("No value '{}'", id.0));
+            //         let ptr = &Value::from_ref(glbl.to_ref(), false);
+            //         builder.load2(ty, ptr, "")
+            //     }
+            // }
+            get_val(globals, builder, vals, id)
+        }
         Neg(ref id) => {
-            let val = vals
-                .get(id)
-                .unwrap_or_else(|| panic!("No value '{}'", id.0));
-            builder.neg(val, "")
+            let val = get_val(globals, builder, vals, id);
+            builder.neg(&val, "")
+            // let val = vals
+            //     .get(id)
+            //     .unwrap_or_else(|| panic!("No value '{}'", id.0));
+            // builder.neg(val, "")
         }
         Add(ref x, ref y) => {
-            let x_ =
-                vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
-            // let y_  = vals.get(y)
-            //     .unwrap_or_else(|| panic!("No value '{:?}'", y));
-            // builder.add(&x_, &y_, "")
-            llvm::Value::from_ref(x_.to_ref(), false)
+            // let x_ =
+            //     vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
+            builder.add(&x_, &y_, "")
+        }
+        Sub(ref x, ref y) => {
+            // let x_ =
+            //     vals.get(x).unwrap_or_else(|| panic!("No value '{}'", x.0));
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
+            builder.sub(&x_, &y_, "")
         }
         CallDir(id, args, fargs) => {
             // get global for label
@@ -218,6 +277,8 @@ fn to_llvm(
             builder.ret(&val);
         }
         asm::T::Let((ref id, ref ty), ref e, ref t) => {
+            // FIXME: need to check if id is in globals
+            // and do a store
             // FIXME: might need fresh fun, bblock, etc..
             let val = exp_to_llvm(globals, ctx, fun, bblock, builder, vals, e);
             // use an alias?
@@ -241,6 +302,17 @@ pub extern "C" fn min_caml_print_int(x: i32) {
 pub extern "C" fn min_caml_print_newline() {
     println!()
 }
+
+// extern "C" {
+//     //#[no_mangle]
+//     static min_caml_hp: *const libc::c_void;
+// }
+
+// #[no_mangle]
+// static min_caml_hp: *const libc::c_void = null_mut();
+
+// #[no_mangle]
+// static min_caml_hp: *mut libc::c_void = std::ptr::null();
 
 #[allow(unused_variables)]
 pub fn f(p: &closure::Prog) {
@@ -399,11 +471,39 @@ pub fn f(p: &closure::Prog) {
 
         let fun_val = module.add_function(name.0.as_str(), &f_ty_);
 
+        // FIXME: add entry to vals using:
+        // LLVMGetParam(Fn, Index)
+
         // FIXME: generate instructions...
     }
 
-    // Generate instructions for top level expression
     let void_ty = llvm::Type::void_type_in_context(&ctx);
+
+    // Add min_caml_hp as an external, so that we can easily observe it later
+    let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+    let min_caml_hp_glbl =
+        llvm::Global::add_to_module(&module, "min_caml_hp", &void_ptr_ty);
+    llvm::set_externally_initialized(&min_caml_hp_glbl, true);
+
+    // allocate memory
+    // move this to a struct we can shove in an Rc<>
+    // to allow keeping the JIT'd code alive
+    let mut mem = unsafe { libc::malloc(128 * 1024 * 1024) };
+    let min_caml_hp = mem;
+    let min_caml_hp_ptr = &mut mem as *mut *mut libc::c_void;
+    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
+    eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
+
+    llvm::add_symbol("min_caml_hp", min_caml_hp_ptr as *const libc::c_void);
+
+    // add to globals map
+    globals.insert(
+        id::L(String::from("min_caml_hp")),
+        (min_caml_hp_glbl, void_ptr_ty, ty::Type::Int),
+    );
+
+    // Generate instructions for top level expression
+
     let int_ty = llvm::Type::int32_type_in_context(&ctx);
     let main_arg_tys = [&void_ty];
     //let main_ty = llvm::Type::function_type(&int_ty, &main_arg_tys);

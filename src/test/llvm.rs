@@ -568,3 +568,81 @@ pub fn test_llvm_callback2() {
 
     module.dump();
 }
+
+#[test]
+pub fn test_llvm_global_update() {
+    let context = Context::new();
+    let mut module = Module::create_with_name_in_context("test_mod8", &context);
+
+    // Main function
+    let void_ty = Type::void_type_in_context(&context);
+    let int_ty = Type::int32_type_in_context(&context);
+    let main_arg_tys = [&void_ty];
+    let main_ty = Type::function_type(&int_ty, &main_arg_tys);
+
+    let main_fun_val = module.add_function("main", &main_ty);
+
+    // add global and use SetExternallyInitialized
+
+    let mut mem = unsafe { libc::malloc(2 * 1024 * 1024) };
+
+    let min_caml_hp = mem;
+    let min_caml_hp_ptr = &mut mem as *mut *mut libc::c_void;
+    eprintln!();
+    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
+    eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
+
+    let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+    let min_caml_hp_glbl =
+        llvm::Global::add_to_module(&module, "min_caml_hp", &void_ptr_ty);
+    llvm::set_externally_initialized(&min_caml_hp_glbl, true);
+    let min_caml_hp_val =
+        llvm::Value::from_ref(min_caml_hp_glbl.to_ref(), false);
+
+    // Add basic block to main function
+    let fun_bb = BasicBlock::append_basic_block_in_context(
+        &context, &main_fun_val, "entry",
+    );
+
+    // // create builder & add instructions
+    let builder = Builder::create_builder_in_context(&context);
+
+    // call setName for each arg?
+
+    builder.position_builder_at_end(&fun_bb);
+    let const_c = Constant::int(&int_ty, 8);
+    let c_val = Value::from_ref(const_c.to_ref(), true);
+
+    let val0 = builder.load2(&void_ptr_ty, &min_caml_hp_val, "");
+    let val1 = builder.add(&val0, &c_val, "");
+    let val2 = builder.store(&val1, &min_caml_hp_val);
+    let val3 = builder.load2(&void_ptr_ty, &min_caml_hp_val, "");
+    let val4 = builder.add(&val3, &c_val, "");
+    let val5 = builder.store(&val4, &min_caml_hp_val);
+    let _ = builder.ret(&c_val);
+
+    println!();
+    module.dump();
+
+    llvm_init();
+
+    let ee = ExecutionEngine::for_module(&mut module);
+
+    llvm::add_symbol("min_caml_hp", min_caml_hp_ptr as *const libc::c_void);
+
+    let main_addr = ee.function_address("main");
+    let main = unsafe {
+        let main: extern "C" fn( () ) -> i32 = std::mem::transmute(main_addr);
+        main
+    };
+    println!("Addr for main: {:#X}", main_addr);
+    let res = main( () );
+    println!("main( () ) = : {:?}", res);
+
+    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
+    eprintln!("min_caml_hp_ptr: {:#X}", min_caml_hp_ptr as u64);
+    let x = unsafe { *min_caml_hp_ptr };
+    eprintln!("*min_caml_hp_ptr: {:#X}", x as u64);
+
+    //module.dump();
+}

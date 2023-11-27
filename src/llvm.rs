@@ -15,16 +15,20 @@ use llvm_sys::core::LLVMAddAlias2;
 use llvm_sys::core::LLVMAddFunction;
 use llvm_sys::core::LLVMAppendBasicBlockInContext;
 use llvm_sys::core::LLVMBuildCall2;
+use llvm_sys::core::LLVMBuildLoad2;
+use llvm_sys::core::LLVMBuildMul;
 use llvm_sys::core::LLVMBuildNeg;
+use llvm_sys::core::LLVMBuildStore;
 use llvm_sys::core::LLVMCreateBuilderInContext;
+use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::core::LLVMVoidTypeInContext;
 use llvm_sys::core::{
-    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMConstArray, LLVMConstInt,
-    LLVMConstReal, LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage,
-    LLVMDisposeModule, LLVMDumpModule, LLVMDumpValue, LLVMFunctionType,
-    LLVMGetGlobalContext, LLVMGetParam, LLVMGetValueName2,
+    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMBuildSub, LLVMConstArray,
+    LLVMConstInt, LLVMConstReal, LLVMContextCreate, LLVMContextDispose,
+    LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule, LLVMDumpValue,
+    LLVMFunctionType, LLVMGetGlobalContext, LLVMGetParam, LLVMGetValueName2,
     LLVMModuleCreateWithNameInContext, LLVMPrintValueToString,
     LLVMSetExternallyInitialized, LLVMSetGlobalConstant, LLVMSetInitializer,
 };
@@ -228,7 +232,7 @@ impl Type {
         Type { ty, owned: true }
     }
 
-    pub fn int32_type(size: u32) -> Type {
+    pub fn int32_type() -> Type {
         let ty = unsafe { LLVMInt32Type() };
         Type { ty, owned: true }
     }
@@ -241,6 +245,14 @@ impl Type {
     // shares context of element type?
     pub fn array_type(elem_ty: &Type, size: u32) -> Type {
         let ty = unsafe { LLVMArrayType(elem_ty.to_ref(), size) };
+        Type {
+            ty,
+            owned: elem_ty.owned,
+        }
+    }
+
+    pub fn pointer_type(elem_ty: &Type, addr_space: u32) -> Type {
+        let ty = unsafe { LLVMPointerType(elem_ty.to_ref(), addr_space) };
         Type {
             ty,
             owned: elem_ty.owned,
@@ -427,6 +439,19 @@ impl Value {
             )
         }
     }
+
+    pub fn get_name(&self) -> Option<String> {
+        unsafe {
+            let mut sz = 0;
+            let buf = LLVMGetValueName2(self.to_ref(), &mut sz);
+            if buf.is_null() {
+                let cstr = std::ffi::CStr::from_ptr(buf);
+                Some(String::from_utf8_lossy(cstr.to_bytes()).into_owned())
+            } else {
+                None
+            }
+        }
+    }
 }
 
 // FIXME: wrap up basic block
@@ -501,6 +526,18 @@ impl Builder {
         unsafe { LLVMPositionBuilderAtEnd(self.to_ref(), bb.to_ref()) }
     }
 
+    pub fn neg(&self, val: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildNeg(
+                self.to_ref(),
+                val.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
     pub fn add(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
         let name_ = CString::new(name).unwrap();
         let val = unsafe {
@@ -514,12 +551,26 @@ impl Builder {
         Value { val, owned: false }
     }
 
-    pub fn neg(&self, val: &Value, name: &str) -> Value {
+    pub fn sub(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
         let name_ = CString::new(name).unwrap();
         let val = unsafe {
-            LLVMBuildNeg(
+            LLVMBuildSub(
                 self.to_ref(),
-                val.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn mul(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildMul(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
                 name_.as_ptr() as *const c_char,
             )
         };
@@ -555,10 +606,26 @@ impl Builder {
         Value { val, owned: false }
     }
 
-    //pub fn load2(&self, ty: &Type,
-}
+    pub fn load2(&self, ty: &Type, ptr: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildLoad2(
+                self.to_ref(),
+                ty.to_ref(),
+                ptr.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
 
-// FIXME: instructions
+    pub fn store(&self, val: &Value, ptr: &Value) -> Value {
+        let val = unsafe {
+            LLVMBuildStore(self.to_ref(), val.to_ref(), ptr.to_ref())
+        };
+        Value { val, owned: false }
+    }
+}
 
 pub struct ExecutionEngine {
     engine: LLVMExecutionEngineRef,
