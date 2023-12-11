@@ -195,7 +195,8 @@ fn main() {
                 dump_extenv();
                 return;
             }
-            let vmcode = r#virtual::f(&closure);
+            let cfg = Default::default();
+            let vmcode = r#virtual::f(&cfg, &closure);
             if args.stage == Stage::VMCode {
                 println!("{:?}\n{}", vmcode, sep);
                 let mut out = String::new();

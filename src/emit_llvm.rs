@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)] // FIXME
+#![allow(clippy::too_many_arguments)]
 
 use llvm_sys::core::LLVMGetParam;
+use llvm_sys::core::LLVMPointerType;
 
 use crate::asm;
 use crate::closure;
@@ -31,6 +33,11 @@ pub fn ty_to_type_in_context(ctx: &llvm::Context, ty: &ty::Type) -> llvm::Type {
             ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
             ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
             ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
+            // FIXME: have a flag to automatically insert
+            // pointer for all function types?
+            // only ever want raw function type at top level?
+            // always use ptr to fn, just change setL to get address...
+            // and to translate type?
             ty::Type::Fun(ref arg_tys, ref ret_ty) => {
                 let mut arg_tys2: Vec<LLVMTypeRef> =
                     arg_tys.iter().map(|ty| to_type(ctx, ty)).collect();
@@ -56,6 +63,115 @@ pub fn ty_to_type_in_context(ctx: &llvm::Context, ty: &ty::Type) -> llvm::Type {
 
     let ty_ = to_type(ctx, ty);
     llvm::Type::new(ty_, false)
+}
+
+pub fn ty_to_type_in_context2(
+    ctx: &llvm::Context,
+    ty: &ty::Type,
+) -> llvm::Type {
+    use llvm_sys::core::LLVMDoubleTypeInContext;
+    use llvm_sys::core::LLVMFunctionType;
+    use llvm_sys::core::LLVMInt32TypeInContext;
+    use llvm_sys::core::LLVMVoidTypeInContext;
+    use llvm_sys::prelude::LLVMTypeRef;
+
+    fn to_type(ctx: &llvm::Context, ty: &ty::Type) -> LLVMTypeRef {
+        match ty {
+            ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
+            ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
+            ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
+            ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
+            // FIXME: have a flag to automatically insert
+            // pointer for all function types?
+            // only ever want raw function type at top level?
+            // always use ptr to fn, just change setL to get address...
+            // and to translate type?
+            ty::Type::Fun(ref arg_tys, ref ret_ty) => {
+                let mut arg_tys2: Vec<LLVMTypeRef> =
+                    arg_tys.iter().map(|ty| to_type(ctx, ty)).collect();
+                let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
+                unsafe {
+                    let fun_ty = LLVMFunctionType(
+                        to_type(ctx, ret_ty),
+                        arg_tys2.as_mut_ptr(),
+                        n,
+                        0,
+                    );
+                    LLVMPointerType(fun_ty, 0)
+                }
+            }
+            ty::Type::Tuple(ref tys) => {
+                todo!()
+            }
+            ty::Type::Array(ref elem_ty) => {
+                todo!()
+            }
+            ty::Type::Var(_) => unreachable!(),
+        }
+    }
+
+    let ty_ = to_type(ctx, ty);
+    llvm::Type::new(ty_, false)
+}
+
+// FIXME: merge with above
+pub fn ty_closure_to_llvm_type(
+    ctx: &llvm::Context,
+    ty: &ty::Type,
+) -> llvm::Type {
+    use llvm_sys::core::LLVMDoubleTypeInContext;
+    use llvm_sys::core::LLVMFunctionType;
+    use llvm_sys::core::LLVMInt32TypeInContext;
+    use llvm_sys::core::LLVMVoidTypeInContext;
+    use llvm_sys::prelude::LLVMTypeRef;
+
+    fn to_type(ctx: &llvm::Context, ty: &ty::Type) -> LLVMTypeRef {
+        match ty {
+            ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
+            ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
+            ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
+            ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
+            ty::Type::Fun(ref arg_tys, ref ret_ty) => {
+                let void_ptr_ty = unsafe {
+                    LLVMPointerType(LLVMVoidTypeInContext(ctx.to_ref()), 0)
+                };
+                let mut arg_tys2 = vec![void_ptr_ty];
+                arg_tys2.extend(arg_tys.iter().map(|ty| to_type(ctx, ty)));
+                let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
+                // Note: fun type in LLVM seems to imply
+                // address/pointer, so no need to explicitly create
+                // pointer type
+                unsafe {
+                    LLVMFunctionType(
+                        to_type(ctx, ret_ty),
+                        arg_tys2.as_mut_ptr(),
+                        n,
+                        0,
+                    )
+                }
+            }
+            ty::Type::Tuple(ref tys) => {
+                todo!()
+            }
+            ty::Type::Array(ref elem_ty) => {
+                todo!()
+            }
+            ty::Type::Var(_) => unreachable!(),
+        }
+    }
+
+    let ty_ = to_type(ctx, ty);
+    llvm::Type::new(ty_, false)
+}
+
+pub fn ty_to_ref_type_in_context(
+    ctx: &llvm::Context,
+    ty: &ty::Type,
+) -> llvm::Type {
+    // FIXME: this probably does need to be recursive to catch
+    // functions returning closures
+    let val_ty = ty_to_type_in_context2(ctx, ty);
+    llvm::Type::pointer_type(&val_ty, 0)
 }
 
 // FN to split asm::T into basic blocks of Vec<Inst>
@@ -110,6 +226,7 @@ fn to_basic_blocks(p: &asm::T, b: &mut Vec<Inst>) -> Vec<BBlock> {
 }
 
 type GlobalMap = HashMap<id::L, (llvm::Value, llvm::Type, ty::Type)>;
+type ValueMap = HashMap<id::T, (llvm::Value, ty::Type)>;
 
 // Just generate list of instructions initially, then create basic blocks
 // after this?
@@ -122,29 +239,38 @@ type GlobalMap = HashMap<id::L, (llvm::Value, llvm::Type, ty::Type)>;
 // FIXME: map from ids to values
 // FIXME: value name or use empty name?
 fn exp_to_llvm(
-    globals: &GlobalMap,
     ctx: &llvm::Context,
+    globals: &GlobalMap,
+    module: &llvm::Module,
     fun: &llvm::Value,
     bblock: &llvm::BasicBlock,
     builder: &llvm::Builder,
-    vals: &mut HashMap<id::T, llvm::Value>,
+    vals: &mut ValueMap,
     e: &asm::Exp,
+    expected_ty: &ty::Type,
 ) -> llvm::Value {
     fn get_val(
         globals: &GlobalMap,
         builder: &llvm::Builder,
-        vals: &HashMap<id::T, llvm::Value>,
+        vals: &ValueMap,
         id: &id::T,
     ) -> Value {
         let val = vals.get(id);
         match val {
-            Some(v) => llvm::Value::from_ref(v.to_ref(), false),
+            Some((v, _)) => llvm::Value::from_ref(v.to_ref(), false),
             None => {
-                let (glbl, ty, _) = globals
+                let (glbl, ty, ty0) = globals
                     .get(&id::L(id.0.clone()))
                     .unwrap_or_else(|| panic!("No value '{}'", id.0));
                 let ptr = &Value::from_ref(glbl.to_ref(), false);
-                builder.load2(ty, ptr, "")
+                // FIXME: we need a flag to configure this behaviour
+                // might want load of global as pointer
+                // or just use of global directly..
+                let ty_ = llvm::Type::pointer_type(ty, 0);
+                // FIXME: use a temp?
+                builder.load2(&ty_, ptr, "")
+                // let ptr = Value::from_ref(glbl.to_ref(), false);
+                // ptr
             }
         }
     }
@@ -153,7 +279,7 @@ fn exp_to_llvm(
         ctx: &llvm::Context,
         globals: &GlobalMap,
         builder: &llvm::Builder,
-        vals: &HashMap<id::T, llvm::Value>,
+        vals: &ValueMap,
         operand: &asm::IdOrImm,
     ) -> llvm::Value {
         match operand {
@@ -163,6 +289,32 @@ fn exp_to_llvm(
                 llvm::constant::int(&int_ty, *x)
             }
         }
+    }
+
+    fn struct_index(
+        ctx: &llvm::Context,
+        globals: &GlobalMap,
+        builder: &llvm::Builder,
+        vals: &ValueMap,
+        base: &id::T,
+        idx: &asm::IdOrImm,
+        step: i32,
+    ) -> llvm::Value {
+        // let int32_ty = llvm::Type::int32_type_in_context(ctx);
+        // let step_c = llvm::constant::int(&int32_ty, step);
+        // let idx_val = id_or_imm_to_value(ctx, globals, builder, vals, idx);
+        // // // FIXME: probably need a temp name here
+        // let offset_val = builder.mul(&idx_val, &step_c, "");
+        // let base_val = get_val(globals, builder, vals, base);
+        // builder.add(&base_val, &offset_val, "")
+        let int64_ty = llvm::Type::int64_type_in_context(ctx);
+        let step_c = llvm::constant::int(&int64_ty, step);
+        let idx_val = id_or_imm_to_value(ctx, globals, builder, vals, idx);
+        // // // FIXME: probably need a temp name here
+        let offset_val = builder.mul(&idx_val, &step_c, "");
+        let base_val = get_val(globals, builder, vals, base);
+        //builder.add_nuw(&base_val, &offset_val, "")
+        builder.add(&base_val, &offset_val, "")
     }
 
     use asm::Exp::*;
@@ -176,13 +328,68 @@ fn exp_to_llvm(
         SetL(ref l) =>
         // simple look up global value
         {
-            let (glbl, ty, _) = globals
+            // let void_ty = llvm::Type::void_type_in_context(&ctx);
+            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+
+            // let (glbl, ty, ty0) = globals
+            //     .get(l)
+            //     .unwrap_or_else(|| panic!("No value '{}'", l.0));
+            // // FIXME: below should get address of label, not the value...
+            // let ptr = &Value::from_ref(glbl.to_ref(), false);
+            // eprintln!("SetL {} : {:?}", l.0, ty0);
+            // // below results in stack overflow with function type
+            // // LLVM expecting pointer to function type?
+            // //builder.load2(ty, ptr, "");
+            // builder.load2(&void_ptr_ty, ptr, "")
+            // let void_ty = llvm::Type::void_type_in_context(&ctx);
+            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+
+            // below is wrong - does a load of the global val (address)
+            // we want the address itself
+            //
+            // let (glbl, ty, ty0) = globals
+            //     .get(l)
+            //     .unwrap_or_else(|| panic!("No value '{}'", l.0));
+            // // FIXME: just use pointer_type?
+            // let ptr_ty = ty_to_ref_type_in_context(ctx, ty0);
+            // let ptr = &Value::from_ref(glbl.to_ref(), false);
+            // eprintln!("SetL {} : {:?}", l.0, ty0);
+            // // LLVM expecting pointer to function type?
+            // //builder.load2(ty, ptr, ""); // bang
+            // //builder.load2(&ptr_ty, ptr, "") // bang
+            // // let void_ty = llvm::Type::void_type_in_context(&ctx);
+            // // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+            // // builder.load2(&void_ptr_ty, ptr, "") // bang
+            // builder.load2(&ptr_ty, ptr, "")
+
+            let (glbl, ty, ty0) = globals
                 .get(l)
                 .unwrap_or_else(|| panic!("No value '{}'", l.0));
-            let ptr = &Value::from_ref(glbl.to_ref(), false);
-            builder.load2(ty, ptr, "")
+            let ptr_ty = ty_to_ref_type_in_context(ctx, ty0);
+            let ptr = Value::from_ref(glbl.to_ref(), false);
+            eprintln!("SetL {} : {:?}", l.0, ty0);
+            ptr
+            // // FIXME: name is ignored and we
+            // // don't get a fresh binding
+            // let val = builder.bitcast(&ptr, &ptr_ty, "SETL");
+            // //val.set_name("SETL");
+            // val
         }
-        Mov(ref id) => get_val(globals, builder, vals, id),
+        Mov(ref id) => {
+            get_val(globals, builder, vals, id)
+            //let val = get_val(globals, builder, vals, id);
+            // module.dump();
+            // todo!();
+            // let expected_ty_ = ty_to_ref_type_in_context(ctx, expected_ty);
+            // // FIXME: name is ignored and we
+            // // don't get a fresh binding
+            // let val = builder.bitcast(&val, &expected_ty_, "MOV");
+            // //val.set_name("MOV");
+            //val
+            // Idea: have our own fn to return fresh values & cast
+            // there is the llvm.ssa.copy intrinsic to do this
+            // use load for globals, llvm.ssa.copy for local vals
+        }
         Neg(ref id) => {
             let val = get_val(globals, builder, vals, id);
             builder.neg(&val, "")
@@ -197,26 +404,122 @@ fn exp_to_llvm(
             let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
             builder.sub(&x_, &y_, "")
         }
+        Ld(ref base, ref idx, ref step) => {
+            // // FIXME: need type in vals
+            // let void_ty = llvm::Type::void_type_in_context(&ctx);
+            // // let ptr =
+            // //     struct_index(ctx, globals, builder, vals, base, idx, *step);
+            // //let ptr = get_val(globals, builder, vals, base);
+            // //builder.load2(&void_ty, &ptr, "")
+            // let int32_ty = llvm::Type::int32_type_in_context(ctx);
+            // let step_c = llvm::constant::int(&int32_ty, *step);
+            // step_c
+            let ptr =
+                struct_index(ctx, globals, builder, vals, base, idx, *step);
+            eprintln!("Ld {}", base.0);
+            // FIXME: need type of base which can be a global or a local
+            // so need to store value
+            // not enough... need to pass down expected type...?
+            // or translate asm to our own instructions and propagate
+            // type info accordingly...
+            //
+            // type of base is not enough. Currently the type of base is
+            // Fun xxx for closures instead of a structured type for the
+            // closure itself. The types are embedded in the various
+            // let statements
+            //
+            // in any future compiler, should have explicitly typed
+            // structures for closures
+            //
+            //builder.load2(, &ptr, "")
+            let expected_ty_ = ty_to_type_in_context2(ctx, expected_ty);
+            let ptr_ty = llvm::Type::pointer_type(&expected_ty_, 0);
+            //builder.load2(&ptr_ty, &ptr, "");
+            builder.load2(&expected_ty_, &ptr, "")
+            // FIXME: do need a ref type
+            // for simple types passthrough, for fun/array/tuple
+            // add ptr
+            // FIXME: NOP
+            // let c =
+            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
+            // builder.add(&c, &c, "")
+        }
+        St(ref x, ref base, ref idx, ref step) => {
+            let ptr =
+                struct_index(ctx, globals, builder, vals, base, idx, *step);
+            let x_ = get_val(globals, builder, vals, x);
+            builder.store(&x_, &ptr)
+            // FIXME: NOP
+            // let c =
+            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
+            // builder.add(&c, &c, "")
+        }
+        CallCls(ref id, ref args, ref fargs) => {
+            let cls_val = get_val(globals, builder, vals, id);
+            let void_ty = llvm::Type::void_type_in_context(ctx);
+            let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+            let fn_ptr = builder.load2(&void_ptr_ty, &cls_val, "");
+
+            // read function arg from first word in closure
+
+            // call closure function with closure as first arg
+
+            let (_, cls_ty) = vals.get(id).unwrap_or_else(|| {
+                panic!("Unable to get type for closure '{}'", id.0)
+            });
+            let cls_ty_ = ty_closure_to_llvm_type(ctx, cls_ty);
+
+            // build args, first is closure
+            let mut args_: Vec<&llvm::Value> = vec![&cls_val];
+            for arg in args {
+                let (val, _) = vals
+                    .get(arg)
+                    .unwrap_or_else(|| panic!("No value '{}'", arg.0));
+                args_.push(val);
+            }
+            // FIXME: fargs
+
+            // call function
+            let cls_ty_ = ty_closure_to_llvm_type(ctx, cls_ty);
+            builder.call2(&cls_ty_, &fn_ptr, &args_, "")
+            // println!("Not done: {:?}", e);
+            // module.dump();
+            // todo!()
+            // FIXME: NOP
+            // let c =
+            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
+            // builder.add(&c, &c, "")
+        }
         CallDir(id, args, fargs) => {
             // get global for label
             let (fun_glbl, fun_ty, _) = globals
                 .get(id)
                 .unwrap_or_else(|| panic!("No global '{}'", id.0));
             // get values for args
+            // let void_ty = llvm::Type::void_type_in_context(&ctx);
+            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+            // let null_ptr = llvm::constant::pointer_null(&void_ptr_ty);
+            // let mut args_: Vec<&llvm::Value> = vec![&null_ptr];
             let mut args_: Vec<&llvm::Value> = vec![];
             for arg in args {
-                args_.push(
-                    vals.get(arg)
-                        .unwrap_or_else(|| panic!("No value '{}'", arg.0)),
-                );
+                let (val, _) = vals
+                    .get(arg)
+                    .unwrap_or_else(|| panic!("No value '{}'", arg.0));
+                args_.push(val);
             }
             // FIXME: fargs
             let f = llvm::Value::from_ref(fun_glbl.to_ref(), false);
             eprintln!("call2 for {}", id.0);
             builder.call2(fun_ty, &f, &args_, "")
+            // FIXME: put above back in
+            // FIXME: NOP
+            // let c =
+            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
+            // builder.add(&c, &c, "")
         }
         _ => {
             println!("Not done: {:?}", e);
+            module.dump();
             todo!()
         }
     }
@@ -224,13 +527,15 @@ fn exp_to_llvm(
 
 // FIXME: need globals map too...
 fn to_llvm(
-    globals: &GlobalMap,
     ctx: &llvm::Context,
+    globals: &GlobalMap,
+    module: &llvm::Module,
     fun: &llvm::Value,
     bblock: &llvm::BasicBlock,
     builder: &llvm::Builder,
-    vals: &mut HashMap<id::T, llvm::Value>,
+    vals: &mut ValueMap,
     p: &asm::T,
+    expected_ty: &ty::Type,
 ) {
     // need to maintain id -> value map
     // and pass down name
@@ -239,23 +544,77 @@ fn to_llvm(
     match p {
         asm::T::Ans(ref e) => {
             // FIXME: retVoid based on type...
-            let val = exp_to_llvm(globals, ctx, fun, bblock, builder, vals, e);
-            // give temp name to val
-            let id = id::genid(&id::T(String::from(".ans")));
-            val.set_name(id.0.as_str());
-            builder.ret(&val);
+            let val = exp_to_llvm(
+                ctx,
+                globals,
+                module,
+                fun,
+                bblock,
+                builder,
+                vals,
+                e,
+                expected_ty,
+            );
+            if val.get_name().is_none() {
+                // give temp name to val
+                let id = id::genid(&id::T(String::from(".ans")));
+                val.set_name(id.0.as_str());
+            }
+            if *expected_ty == ty::Type::Unit {
+                builder.ret_void();
+            } else {
+                builder.ret(&val);
+            }
         }
         asm::T::Let((ref id, ref ty), ref e, ref t) => {
-            // FIXME: need to check if id is in globals
-            // and do a store
+            // need a temporary for the intermediate?
             // FIXME: might need fresh fun, bblock, etc..
-            let val = exp_to_llvm(globals, ctx, fun, bblock, builder, vals, e);
-            // use an alias?
-            eprintln!("Setting name to {}", id.0.as_str());
-            val.set_name(id.0.as_str());
+            let val = exp_to_llvm(
+                ctx, globals, module, fun, bblock, builder, vals, e, ty,
+            );
+            // FIXME: below is inefficient
+            // FIXME: below captures global functions that
+            // also have local binding with the same name for closures
+            // (which they probably shouldn't)
+            // keep a separate global variables map?
+            // or a flag?
+            //if globals.contains_key(&id::L(id.0.clone())) {
+            // FIXME: hardcoded
+            if id.0 == "min_caml_hp" {
+                // "let binding" to global - need to store
+                eprintln!("Store for global {}", id.0);
+                let l = id::L(id.0.clone());
+                let (glbl, _, _) = globals.get(&l).unwrap();
+                builder.store(&val, glbl);
+            } else {
+                // use an alias?
+                if val.get_name().unwrap_or_default().is_empty() {
+                    eprintln!("Setting name to {}", id.0.as_str());
+                    val.set_name(id.0.as_str());
+                } else {
+                    eprintln!(
+                        "Warning, ignoring bind of {} to {}",
+                        val.get_name().unwrap(),
+                        id.0.as_str()
+                    );
+                }
+            }
+            //module.dump();
             // add to map
-            vals.insert(id.clone(), val);
-            to_llvm(globals, ctx, fun, bblock, builder, vals, t)
+            vals.insert(id.clone(), (val, ty.clone()));
+
+            // recurse
+            to_llvm(
+                ctx,
+                globals,
+                module,
+                fun,
+                bblock,
+                builder,
+                vals,
+                t,
+                expected_ty,
+            )
         }
     }
 }
@@ -283,9 +642,84 @@ pub extern "C" fn min_caml_print_newline() {
 // #[no_mangle]
 // static min_caml_hp: *mut libc::c_void = std::ptr::null();
 
+// determine if a function is a closure or not
+// Note: yet another signal we should be translating to our
+// own ADT from closure::Prog
+// arguably should be Option<bool>
+fn is_closure(fun_id: &id::L, p: &closure::Prog) -> bool {
+    fn is_clos(fun_id: &id::L, term: &closure::T) -> bool {
+        use closure::T::*;
+        match term {
+            Unit
+            | Int(_)
+            | Float(_)
+            | Neg(_)
+            | Add(_, _)
+            | Sub(_, _)
+            | FNeg(_)
+            | FAdd(_, _)
+            | FSub(_, _)
+            | FMul(_, _)
+            | FDiv(_, _)
+            | Var(_)
+            | AppDir(_, _)
+            | Tuple(_)
+            | Get(_, _)
+            | Put(_, _, _)
+            | ExtArray(_) => false,
+            IfEq(_, _, ref t_b, ref f_b)
+            | IfLE(_, _, ref t_b, ref f_b)
+            | IfLt(_, _, ref t_b, ref f_b)
+            | IfGt(_, _, ref t_b, ref f_b)
+            | IfGe(_, _, ref t_b, ref f_b) => {
+                is_clos(fun_id, t_b) || is_clos(fun_id, f_b)
+            }
+            Let(_, ref e0, ref e1) => {
+                is_clos(fun_id, e0) || is_clos(fun_id, e1)
+            }
+            MakeCls((ref cls_id, _), _, ref t) => {
+                if cls_id.0 == fun_id.0 {
+                    true
+                } else {
+                    is_clos(fun_id, t)
+                }
+            }
+            AppCls(ref cls_id, _) => cls_id.0 == fun_id.0,
+            LetTuple(_, _, ref e) => is_clos(fun_id, e),
+        }
+    }
+
+    let closure::Prog::Prog(ref fundefs, ref main) = p;
+
+    let mut res = false;
+    for closure::FunDef {
+        name: _,
+        args: _,
+        formal_fv: _,
+        ref body,
+    } in fundefs
+    {
+        res = res || is_clos(fun_id, body)
+    }
+    res || is_clos(fun_id, main)
+}
+
 #[allow(unused_variables)]
 pub fn f(p: &closure::Prog) {
-    let vcode = r#virtual::f(p);
+    // fn - build set of closures by identifying all calls to CallCls?
+    // ideally want flag in FunDefs...
+
+    let cfg = r#virtual::Config {
+        int_size: 8,
+        float_size: 8,
+    };
+    let vcode = r#virtual::f(&cfg, p);
+    let sep = "--------";
+    println!("{:?}\n{}", vcode, sep);
+    let mut out = String::new();
+    vcode.pp(&mut out, 0).expect("unable to pretty print!");
+    println!("{}", out);
+    println!("{}", sep);
     let asm::Prog::Prog(floats, fds, c) = vcode;
 
     let ctx = llvm::Context::new();
@@ -324,6 +758,8 @@ pub fn f(p: &closure::Prog) {
     }
     // labels
 
+    // Add intrinsics
+
     // FIXME: allocate global variables (min_caml_hp)
 
     // FIXME: Add symbols for runtime
@@ -348,6 +784,7 @@ pub fn f(p: &closure::Prog) {
     // FIXME: need to split ty args
     for (name, ty, ptr) in runtime_functions {
         let ty_ = ty_to_type_in_context(&ctx, &ty);
+        //let ty_ = ty_to_type_in_context2(&ctx, &ty);
         let glbl = module.add_global(name, &ty_);
         llvm::set_externally_initialized(&glbl, true);
         llvm::add_symbol(name, ptr);
@@ -372,15 +809,13 @@ pub fn f(p: &closure::Prog) {
     eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
     eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
 
-    llvm::add_symbol("min_caml_hp", min_caml_hp_ptr as *const libc::c_void);
-
     // add to globals map
     globals.insert(
         id::L(String::from("min_caml_hp")),
         (min_caml_hp_glbl, void_ptr_ty, ty::Type::Int),
     );
 
-    let mut vals = std::collections::HashMap::<id::T, llvm::Value>::new();
+    let mut vals = ValueMap::new();
     // fundefs
 
     // Note the conversion to the virtual assembler separates out
@@ -430,25 +865,70 @@ pub fn f(p: &closure::Prog) {
         ret: ref ret_ty,
     } in fds
     {
+        //let is_clos = name.0 != "make_adder.5";
+        let is_clos = is_closure(name, p);
+        //if name.0 == "make_adder.5" { continue }
+        //let f_ty_ = ty_to_type_in_context(&ctx, &split_ty_args(f_ty));
+
+        // FIXME: functions need to have an implicit closure argument
+        // might need local vals map for each function...
+        // extended with fn name -> closure value
+        //
+        // First argument should be the closure
+        // generated code should include a GetParam for the
+        // closure argument, naming it the same as the function
+        //
+        // CallCls then reads the function pointer from the closure,
+        // calls this function, and provides the closure pointer itself
+        // as the first arg
+        //
         let f_ty = fd_tys
             .get(name)
             .unwrap_or_else(|| panic!("No type for function '{}'", name.0));
 
-        let f_ty_ = ty_to_type_in_context(&ctx, &split_ty_args(f_ty));
+        let f_ty_ = {
+            match split_ty_args(f_ty) {
+                ty::Type::Fun(ref arg_tys, ref res_ty) => {
+                    // add closure argument
+                    let closure_ty = llvm::Type::pointer_type(&void_ty, 0);
+                    let mut arg_tys_ =
+                        if is_clos { vec![closure_ty] } else { vec![] };
+                    for ty in arg_tys {
+                        arg_tys_.push(ty_to_type_in_context2(&ctx, ty));
+                    }
+                    let arg_tys_2: Vec<&llvm::Type> = arg_tys_.iter().collect();
+                    llvm::Type::function_type(
+                        &ty_to_type_in_context2(&ctx, res_ty),
+                        &arg_tys_2,
+                    )
+                }
+                _ => panic!("Function type expected, got: {:?}", f_ty),
+            }
+        };
+        println!("Adding closure '{}' of type:", name.0);
+        f_ty_.dump();
+        println!();
 
         let fun_val = module.add_function(name.0.as_str(), &f_ty_);
 
         // set arg names and add entry to vals for each
         // note - arg names are globally unique, so
         // no need for nestend environments
-        for (idx, id) in args.iter().chain(fargs.iter()).enumerate() {
-            // FIXME: add get_param to Value
+
+        let v = if is_clos {
+            vec![id::T(name.0.clone())]
+        } else {
+            vec![]
+        };
+        for (idx, id) in
+            v.iter().chain(args.iter()).chain(fargs.iter()).enumerate()
+        {
             let p = unsafe {
                 LLVMGetParam(fun_val.to_ref(), idx.try_into().unwrap())
             };
             let p_ = Value::from_ref(p, false);
             p_.set_name(&id.0);
-            vals.insert(id.clone(), p_);
+            vals.insert(id.clone(), (p_, f_ty.clone()));
         }
 
         // FIXME: need clone
@@ -466,7 +946,10 @@ pub fn f(p: &closure::Prog) {
 
         builder.position_builder_at_end(&fun_bb);
 
-        to_llvm(&globals, &ctx, &fun_val, &fun_bb, &builder, &mut vals, exp);
+        to_llvm(
+            &ctx, &globals, &module, &fun_val, &fun_bb, &builder, &mut vals,
+            exp, ret_ty,
+        );
     }
 
     // Generate instructions for top level expression
@@ -485,23 +968,49 @@ pub fn f(p: &closure::Prog) {
 
     builder.position_builder_at_end(&main_bb);
 
-    to_llvm(&globals, &ctx, &main_val, &main_bb, &builder, &mut vals, &c);
+    to_llvm(
+        &ctx,
+        &globals,
+        &module,
+        &main_val,
+        &main_bb,
+        &builder,
+        &mut vals,
+        &c,
+        &ty::Type::Unit,
+    );
 
     // FIXME: need Debug for everything...
     //println!("Globals: {:?}", globals);
     module.dump();
 
+    eprintln!("Creating execution engine...");
     let ee = llvm::ExecutionEngine::for_module(&mut module);
-
     // FIXME: check result...
+    eprintln!("done: {:X}", ee.to_ref() as u64);
+
+    llvm::add_symbol_mut("min_caml_hp", min_caml_hp_ptr as *mut libc::c_void);
+
     let main_addr = ee.function_address("_main");
     let main = unsafe {
         let main: extern "C" fn(()) -> () = std::mem::transmute(main_addr);
         main
     };
     println!("Addr for main: {:#X}", main_addr);
+    let min_caml_hp_0 = unsafe { *min_caml_hp_ptr };
+    eprintln!("min_caml_hp: {:#X}", unsafe { *min_caml_hp_ptr as u64 });
     main(());
     println!();
+    let min_caml_hp_1 = unsafe { *min_caml_hp_ptr };
+    eprintln!("min_caml_hp: {:#X}", unsafe { *min_caml_hp_ptr as u64 });
+    let mut ptr = min_caml_hp_0;
+    while ptr < min_caml_hp_1 {
+        let x = unsafe { *(ptr as *const u64) };
+        eprintln!("{:#016X}", x);
+        ptr = ptr.wrapping_add(8);
+    }
+
+    // FIXME: dump addreses for each fn
 
     /*
         Notes:

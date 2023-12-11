@@ -11,6 +11,20 @@ use std::cell::RefCell;
 
 type M = im::HashMap<id::T, Type>;
 
+pub struct Config {
+    pub int_size: i32,
+    pub float_size: i32,
+}
+
+impl std::default::Default for Config {
+    fn default() -> Self {
+        Config {
+            int_size: 4,
+            float_size: 8,
+        }
+    }
+}
+
 // let data = ref [] (* 浮動小数点数の定数テーブル (caml2html: virtual_data) *)
 thread_local! {
     pub static DATA : RefCell<Vec<(id::L, f64)>> =
@@ -50,6 +64,7 @@ fn separate<A: Clone>(xts: &[(A, Type)]) -> (Vec<A>, Vec<A>) {
 }
 
 fn expand<A: Clone, B>(
+    cfg: &Config,
     xts: &[(A, Type)],
     ini: (i32, B),
     addf: &dyn Fn(A, i32, B) -> B,
@@ -60,14 +75,14 @@ fn expand<A: Clone, B>(
         ini,
         &|(offset, acc), x| {
             let offset = asm::align(offset);
-            (offset + 8, addf(x.clone(), offset, acc))
+            (offset + cfg.float_size, addf(x.clone(), offset, acc))
         },
-        &|(offset, acc), x, t| (offset + 4, addi(x, t, offset, acc)),
+        &|(offset, acc), x, t| (offset + cfg.int_size, addi(x, t, offset, acc)),
     )
 }
 
 /* 式の仮想マシンコード生成 (caml2html: virtual_g) */
-pub fn g(env: &M, e: &closure::T) -> asm::T {
+pub fn g(cfg: &Config, env: &M, e: &closure::T) -> asm::T {
     use asm::Exp::*;
     use asm::IdOrImm::*;
     use asm::T::*;
@@ -110,63 +125,93 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         Closure::FMul(ref x, ref y) => Ans(FMulD(x.clone(), y.clone())),
         Closure::FDiv(ref x, ref y) => Ans(FDivD(x.clone(), y.clone())),
         Closure::IfEq(ref x, ref y, ref e1, ref e2) => match env.get(x) {
-            Some(Type::Bool) | Some(Type::Int) => {
-                Ans(IfEq(x.clone(), V(y.clone()), b(g(env, e1)), b(g(env, e2))))
-            }
-            Some(Type::Float) => {
-                Ans(IfFEq(x.clone(), y.clone(), b(g(env, e1)), b(g(env, e2))))
-            }
+            Some(Type::Bool) | Some(Type::Int) => Ans(IfEq(
+                x.clone(),
+                V(y.clone()),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
+            Some(Type::Float) => Ans(IfFEq(
+                x.clone(),
+                y.clone(),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
             None | Some(_) => {
                 panic!("equality supported only for bool, int and float")
             }
         },
         Closure::IfLE(ref x, ref y, ref e1, ref e2) => match env.get(x) {
-            Some(Type::Bool) | Some(Type::Int) => {
-                Ans(IfLE(x.clone(), V(y.clone()), b(g(env, e1)), b(g(env, e2))))
-            }
-            Some(Type::Float) => {
-                Ans(IfFLE(x.clone(), y.clone(), b(g(env, e1)), b(g(env, e2))))
-            }
+            Some(Type::Bool) | Some(Type::Int) => Ans(IfLE(
+                x.clone(),
+                V(y.clone()),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
+            Some(Type::Float) => Ans(IfFLE(
+                x.clone(),
+                y.clone(),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
             None | Some(_) => {
                 panic!("equality supported only for bool, int and float")
             }
         },
         Closure::IfGe(ref x, ref y, ref e1, ref e2) => match env.get(x) {
-            Some(Type::Bool) | Some(Type::Int) => {
-                Ans(IfGE(x.clone(), V(y.clone()), b(g(env, e1)), b(g(env, e2))))
-            }
-            Some(Type::Float) => {
-                Ans(IfFGE(x.clone(), y.clone(), b(g(env, e1)), b(g(env, e2))))
-            }
+            Some(Type::Bool) | Some(Type::Int) => Ans(IfGE(
+                x.clone(),
+                V(y.clone()),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
+            Some(Type::Float) => Ans(IfFGE(
+                x.clone(),
+                y.clone(),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
             None | Some(_) => {
                 panic!("equality supported only for bool, int and float")
             }
         },
         Closure::IfLt(ref x, ref y, ref e1, ref e2) => match env.get(x) {
-            Some(Type::Bool) | Some(Type::Int) => {
-                Ans(IfLt(x.clone(), V(y.clone()), b(g(env, e1)), b(g(env, e2))))
-            }
-            Some(Type::Float) => {
-                Ans(IfFLt(x.clone(), y.clone(), b(g(env, e1)), b(g(env, e2))))
-            }
+            Some(Type::Bool) | Some(Type::Int) => Ans(IfLt(
+                x.clone(),
+                V(y.clone()),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
+            Some(Type::Float) => Ans(IfFLt(
+                x.clone(),
+                y.clone(),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
             None | Some(_) => {
                 panic!("equality supported only for bool, int and float")
             }
         },
         Closure::IfGt(ref x, ref y, ref e1, ref e2) => match env.get(x) {
-            Some(Type::Bool) | Some(Type::Int) => {
-                Ans(IfGt(x.clone(), V(y.clone()), b(g(env, e1)), b(g(env, e2))))
-            }
-            Some(Type::Float) => {
-                Ans(IfFGt(x.clone(), y.clone(), b(g(env, e1)), b(g(env, e2))))
-            }
+            Some(Type::Bool) | Some(Type::Int) => Ans(IfGt(
+                x.clone(),
+                V(y.clone()),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
+            Some(Type::Float) => Ans(IfFGt(
+                x.clone(),
+                y.clone(),
+                b(g(cfg, env, e1)),
+                b(g(cfg, env, e2)),
+            )),
             None | Some(_) => {
                 panic!("equality supported only for bool, int and float")
             }
         },
         Closure::Let((ref x, ref t1), ref e1, ref e2) => {
-            let e1_ = g(env, e1);
-            let e2_ = g(&env.update(x.clone(), t1.clone()), e2);
+            let e1_ = g(cfg, env, e1);
+            let e2_ = g(cfg, &env.update(x.clone(), t1.clone()), e2);
             asm::concat(&e1_, (x.clone(), t1.clone()), &e2_)
         }
         Closure::Var(ref x) => match env.get(x) {
@@ -187,7 +232,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         /* クロージャの生成 (caml2html: virtual_makecls) */
         /* Closureのアドレスをセットしてから、自由変数の値をストア */
         {
-            let e2_ = g(&env.update(x.clone(), t.clone()), e2);
+            let e2_ = g(cfg, &env.update(x.clone(), t.clone()), e2);
             // let env_ = env.clone().update(x.clone(), t.clone());
             // let e2_ = g(&env_, e2);
             let yts: Vec<(id::T, Type)> = ys
@@ -198,8 +243,9 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 })
                 .collect();
             let (offset, store_fv) = expand(
+                cfg,
                 &yts,
-                (4, e2_),
+                (cfg.int_size, e2_),
                 &|ref y, ref offset, ref store_fv| {
                     asm::seq(
                         &StDF(y.clone(), x.clone(), C(*offset), 1),
@@ -260,6 +306,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
                 })
                 .collect();
             let (offset, store) = expand(
+                cfg,
                 &xts,
                 (0, Ans(Mov(y.clone()))),
                 &|x, ref offset, ref store| {
@@ -291,8 +338,9 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             let mut env_ = env.clone();
             env_.extend(xts.iter().cloned());
             let (_offset, load) = expand(
+                cfg,
                 xts,
-                (0, g(&env_, e2)),
+                (0, g(cfg, &env_, e2)),
                 &|ref x, ref offset, ref load| {
                     /* [XX] a little ad hoc optimization */
                     if !s.contains(x) {
@@ -320,8 +368,10 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
             /* 配列の読み出し (caml2html: virtual_get) */
             Some(Type::Array(b)) => match **b {
                 Type::Unit => Ans(Nop),
-                Type::Float => Ans(LdDF(x.clone(), V(y.clone()), 8)),
-                _ => Ans(Ld(x.clone(), V(y.clone()), 4)),
+                Type::Float => {
+                    Ans(LdDF(x.clone(), V(y.clone()), cfg.float_size))
+                }
+                _ => Ans(Ld(x.clone(), V(y.clone()), cfg.int_size)),
             },
             Some(_) => panic!("invalid Get"),
             None => panic!("no type"),
@@ -329,8 +379,13 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
         Closure::Put(ref x, ref y, ref z) => match env.get(x) {
             Some(Type::Array(b)) => match **b {
                 Type::Unit => Ans(Nop),
-                Type::Float => Ans(StDF(z.clone(), x.clone(), V(y.clone()), 8)),
-                _ => Ans(St(z.clone(), x.clone(), V(y.clone()), 4)),
+                Type::Float => Ans(StDF(
+                    z.clone(),
+                    x.clone(),
+                    V(y.clone()),
+                    cfg.float_size,
+                )),
+                _ => Ans(St(z.clone(), x.clone(), V(y.clone()), cfg.int_size)),
             },
             Some(_) => panic!("invalid Put!"),
             None => panic!("no type"),
@@ -343,7 +398,7 @@ pub fn g(env: &M, e: &closure::T) -> asm::T {
 }
 
 /* 関数の仮想マシンコード生成 (caml2html: virtual_h) */
-pub fn h(fd: &closure::FunDef) -> asm::FunDef {
+pub fn h(cfg: &Config, fd: &closure::FunDef) -> asm::FunDef {
     use asm::Exp::*;
     use asm::IdOrImm::*;
     use asm::T::*;
@@ -357,8 +412,9 @@ pub fn h(fd: &closure::FunDef) -> asm::FunDef {
     let env_ = M::from_iter(zts.clone())
         + M::from_iter(yts.clone()).update(id::T(x.clone()), t.clone());
     let (_offset, load) = expand(
+        cfg,
         zts,
-        (4, g(&env_, e)),
+        (cfg.int_size, g(cfg, &env_, e)),
         &|ref z, ref offset, ref load| {
             asm::fletd(
                 z,
@@ -386,15 +442,18 @@ pub fn h(fd: &closure::FunDef) -> asm::FunDef {
     }
 }
 
+// FIXME: take config to specify
+// int/word (and float?) sizes
+
 /* プログラム全体の仮想マシンコード生成 (caml2html: virtual_f) */
-pub fn f(p: &closure::Prog) -> asm::Prog {
+pub fn f(cfg: &Config, p: &closure::Prog) -> asm::Prog {
     let closure::Prog::Prog(ref fundefs, ref e) = p;
     DATA.with(|data_| {
         let mut data = data_.borrow_mut();
         data.clear();
     });
-    let fundefs_ = fundefs.iter().map(h).collect();
-    let e_ = g(&M::new(), e);
+    let fundefs_ = fundefs.iter().map(|fd| h(cfg, fd)).collect();
+    let e_ = g(cfg, &M::new(), e);
     DATA.with(|data_| {
         let data = data_.borrow().clone();
         asm::Prog::Prog(data, fundefs_, e_)

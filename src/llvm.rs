@@ -14,23 +14,28 @@ extern crate llvm_sys;
 use llvm_sys::core::LLVMAddAlias2;
 use llvm_sys::core::LLVMAddFunction;
 use llvm_sys::core::LLVMAppendBasicBlockInContext;
+use llvm_sys::core::LLVMBuildBitCast;
 use llvm_sys::core::LLVMBuildCall2;
 use llvm_sys::core::LLVMBuildLoad2;
 use llvm_sys::core::LLVMBuildMul;
+use llvm_sys::core::LLVMBuildNUWAdd;
 use llvm_sys::core::LLVMBuildNeg;
 use llvm_sys::core::LLVMBuildStore;
 use llvm_sys::core::LLVMCreateBuilderInContext;
+use llvm_sys::core::LLVMDumpType;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
+use llvm_sys::core::LLVMSetAlignment;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::core::LLVMVoidTypeInContext;
 use llvm_sys::core::{
-    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMBuildSub, LLVMConstArray,
-    LLVMConstInt, LLVMConstReal, LLVMContextCreate, LLVMContextDispose,
-    LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule, LLVMDumpValue,
-    LLVMFunctionType, LLVMGetGlobalContext, LLVMGetParam, LLVMGetValueName2,
-    LLVMModuleCreateWithNameInContext, LLVMPrintValueToString,
-    LLVMSetExternallyInitialized, LLVMSetGlobalConstant, LLVMSetInitializer,
+    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildSub,
+    LLVMConstArray, LLVMConstInt, LLVMConstReal, LLVMContextCreate,
+    LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule,
+    LLVMDumpValue, LLVMFunctionType, LLVMGetGlobalContext, LLVMGetParam,
+    LLVMGetValueName2, LLVMModuleCreateWithNameInContext,
+    LLVMPrintValueToString, LLVMSetExternallyInitialized,
+    LLVMSetGlobalConstant, LLVMSetInitializer,
 };
 use llvm_sys::error::LLVMErrorRef;
 use llvm_sys::error::LLVMErrorSuccess;
@@ -77,7 +82,8 @@ use llvm_sys::target::LLVM_InitializeNativeTarget;
 
 use llvm_sys::core::{
     LLVMArrayType, LLVMDoubleType, LLVMDoubleTypeInContext, LLVMInt32Type,
-    LLVMInt32TypeInContext, LLVMIntType, LLVMIntTypeInContext,
+    LLVMInt32TypeInContext, LLVMInt64Type, LLVMInt64TypeInContext, LLVMIntType,
+    LLVMIntTypeInContext,
 };
 
 use libc::c_char;
@@ -246,6 +252,11 @@ impl Type {
         Type { ty, owned: true }
     }
 
+    pub fn int64_type() -> Type {
+        let ty = unsafe { LLVMInt64Type() };
+        Type { ty, owned: true }
+    }
+
     pub fn double_type() -> Type {
         let ty = unsafe { LLVMDoubleType() };
         Type { ty, owned: true }
@@ -305,12 +316,19 @@ impl Type {
         Type { ty, owned: false }
     }
 
+    pub fn int64_type_in_context(ctx: &Context) -> Type {
+        let ty = unsafe { LLVMInt64TypeInContext(ctx.to_ref()) };
+        Type { ty, owned: false }
+    }
+
     pub fn double_type_in_context(ctx: &Context) -> Type {
         let ty = unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) };
         Type { ty, owned: false }
     }
 
-    // FIXME: dump
+    pub fn dump(&self) {
+        unsafe { LLVMDumpType(self.to_ref()) }
+    }
 }
 
 pub struct Value {
@@ -360,10 +378,10 @@ impl Value {
             let mut sz = 0;
             let buf = LLVMGetValueName2(self.to_ref(), &mut sz);
             if buf.is_null() {
+                None
+            } else {
                 let cstr = std::ffi::CStr::from_ptr(buf);
                 Some(String::from_utf8_lossy(cstr.to_bytes()).into_owned())
-            } else {
-                None
             }
         }
     }
@@ -383,6 +401,8 @@ impl Value {
 }
 
 pub mod constant {
+    use llvm_sys::core::{LLVMConstPointerNull, LLVMIsAConstantPointerNull};
+
     use super::*;
 
     pub fn int(ty: &Type, x: i32) -> Value {
@@ -402,6 +422,11 @@ pub mod constant {
             vals.iter().map(|x| x.to_ref()).collect();
         let val =
             unsafe { LLVMConstArray(elem_ty.to_ref(), v.as_mut_ptr(), n) };
+        Value::from_ref(val, true)
+    }
+
+    pub fn pointer_null(ptr_ty: &Type) -> Value {
+        let val = unsafe { LLVMConstPointerNull(ptr_ty.to_ref()) };
         Value::from_ref(val, true)
     }
 }
@@ -501,6 +526,19 @@ impl Builder {
         Value { val, owned: false }
     }
 
+    pub fn add_nuw(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildNUWAdd(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
     pub fn sub(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
         let name_ = CString::new(name).unwrap();
         let val = unsafe {
@@ -529,6 +567,11 @@ impl Builder {
 
     pub fn ret(&self, val: &Value) -> Value {
         let val = unsafe { LLVMBuildRet(self.to_ref(), val.to_ref()) };
+        Value { val, owned: false }
+    }
+
+    pub fn ret_void(&self) -> Value {
+        let val = unsafe { LLVMBuildRetVoid(self.to_ref()) };
         Value { val, owned: false }
     }
 
@@ -566,12 +609,26 @@ impl Builder {
                 name_.as_ptr() as *const c_char,
             )
         };
+        //unsafe { LLVMSetAlignment(val, 4) };
         Value { val, owned: false }
     }
 
     pub fn store(&self, val: &Value, ptr: &Value) -> Value {
         let val = unsafe {
             LLVMBuildStore(self.to_ref(), val.to_ref(), ptr.to_ref())
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn bitcast(&self, val: &Value, ty: &Type, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildBitCast(
+                self.to_ref(),
+                val.to_ref(),
+                ty.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
         };
         Value { val, owned: false }
     }
@@ -658,6 +715,13 @@ pub fn add_symbol_for_fn<A, B>(name: &str, f: &extern "C" fn(A) -> B) {
 }
 
 pub fn add_symbol(name: &str, ptr: *const core::ffi::c_void) {
+    let name_ = std::ffi::CString::new(name).unwrap();
+    //let addr = ptr as *const core::ffi::c_void as u64;
+    let addr = ptr as u64;
+    unsafe { LLVMAddSymbol(name_.as_ptr(), addr as *mut libc::c_void) }
+}
+
+pub fn add_symbol_mut(name: &str, ptr: *mut core::ffi::c_void) {
     let name_ = std::ffi::CString::new(name).unwrap();
     //let addr = ptr as *const core::ffi::c_void as u64;
     let addr = ptr as u64;

@@ -55,7 +55,8 @@ fn test_f() {
             let closure_converted = closure::f(&alpha_exp);
             println!("{:?}", closure_converted);
 
-            let vmcode_prog = r#virtual::f(&closure_converted);
+            let cfg = Default::default();
+            let vmcode_prog = r#virtual::f(&cfg, &closure_converted);
             println!("{:?}", vmcode_prog);
 
             let (v, _s) = interp::f(&vmcode_prog);
