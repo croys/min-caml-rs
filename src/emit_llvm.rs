@@ -18,6 +18,7 @@ use crate::ty;
 
 //use libc::c_char;
 use std::collections::HashMap;
+use std::ptr;
 //use std::ffi::CString;
 
 pub fn ty_to_ref_type_in_context(
@@ -36,7 +37,7 @@ pub fn ty_to_type_in_context(
 ) -> llvm::Type {
     use llvm_sys::core::LLVMDoubleTypeInContext;
     use llvm_sys::core::LLVMFunctionType;
-    use llvm_sys::core::LLVMInt32TypeInContext;
+    use llvm_sys::core::LLVMInt64TypeInContext;
     use llvm_sys::core::LLVMVoidTypeInContext;
     use llvm_sys::prelude::LLVMTypeRef;
 
@@ -48,8 +49,8 @@ pub fn ty_to_type_in_context(
     ) -> LLVMTypeRef {
         match ty {
             ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
-            ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
-            ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
+            ty::Type::Bool => unsafe { LLVMInt64TypeInContext(ctx.to_ref()) },
+            ty::Type::Int => unsafe { LLVMInt64TypeInContext(ctx.to_ref()) },
             ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
             ty::Type::Fun(ref arg_tys, ref ret_ty) => {
                 let void_ptr_ty = unsafe {
@@ -79,10 +80,17 @@ pub fn ty_to_type_in_context(
                 }
             }
             ty::Type::Tuple(ref tys) => {
-                todo!()
+                // Should really be a struct, but just
+                // use void* for now
+                unsafe {
+                    LLVMPointerType(LLVMVoidTypeInContext(ctx.to_ref()), 0)
+                }
             }
             ty::Type::Array(ref elem_ty) => {
-                todo!()
+                // Note: no array dimensions, so just use a pointer
+                let ty_ = to_type(ctx, elem_ty, true, true);
+                // unsafe { LLVMArrayType(ElementType, ElementCount)}
+                unsafe { LLVMPointerType(ty_, 0) }
             }
             ty::Type::Var(_) => unreachable!(),
         }
@@ -154,8 +162,6 @@ type ValueMap = HashMap<id::T, (llvm::Value, ty::Type)>;
 
 // Will try just going from asm::T to ins directly initially....
 
-// FIXME: map from ids to values
-// FIXME: value name or use empty name?
 fn exp_to_llvm(
     ctx: &llvm::Context,
     globals: &GlobalMap,
@@ -203,7 +209,7 @@ fn exp_to_llvm(
         match operand {
             asm::IdOrImm::V(ref id) => get_val(globals, builder, vals, id),
             asm::IdOrImm::C(x) => {
-                let int_ty = llvm::Type::int32_type_in_context(ctx);
+                let int_ty = llvm::Type::int64_type_in_context(ctx);
                 llvm::constant::int(&int_ty, *x)
             }
         }
@@ -239,9 +245,9 @@ fn exp_to_llvm(
     eprintln!("Exp: {:?}", e);
     match e {
         // FIXME: call to llvm.donothing()?
-        Nop => llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0),
+        Nop => llvm::constant::int(&llvm::Type::int64_type_in_context(ctx), 0),
         Set(x) => {
-            llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), *x)
+            llvm::constant::int(&llvm::Type::int64_type_in_context(ctx), *x)
         }
         SetL(ref l) =>
         // simple look up global value
@@ -466,6 +472,29 @@ pub extern "C" fn min_caml_print_newline() {
     println!()
 }
 
+static mut MIN_CAML_HP: *mut libc::c_void = ptr::null_mut();
+
+#[no_mangle]
+pub extern "C" fn min_caml_create_array(
+    sz: u64,
+    val: u64,
+) -> *mut libc::c_void {
+    println!("Initialising array: {}, {}", sz, val);
+    unsafe {
+        let p = MIN_CAML_HP;
+        let sz_ = sz as usize;
+        let arr: &mut [u64] = std::slice::from_raw_parts_mut(
+            MIN_CAML_HP as *mut u64,
+            sz as usize,
+        );
+        for v in arr.iter_mut().take(sz_) {
+            *v = val;
+        }
+        MIN_CAML_HP = MIN_CAML_HP.wrapping_add(sz_ * 8);
+        p
+    }
+}
+
 // extern "C" {
 //     //#[no_mangle]
 //     static min_caml_hp: *const libc::c_void;
@@ -595,8 +624,6 @@ pub fn f(p: &closure::Prog) {
 
     // Add intrinsics
 
-    // FIXME: allocate global variables (min_caml_hp)
-
     // FIXME: Add symbols for runtime
 
     // FIXME: Need to add globals first, then define symbols are ee is created?
@@ -613,6 +640,14 @@ pub fn f(p: &closure::Prog) {
             "min_caml_print_newline",
             ty::Type::Fun(vec![], Box::new(ty::Type::Unit)),
             min_caml_print_newline as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_create_array",
+            ty::Type::Fun(
+                vec![ty::Type::Int, ty::Type::Int],
+                Box::new(ty::Type::Int), // Really want address type
+            ),
+            min_caml_create_array as *const core::ffi::c_void,
         ),
     ];
 
@@ -634,14 +669,14 @@ pub fn f(p: &closure::Prog) {
     let min_caml_hp_glbl = module.add_global("min_caml_hp", &void_ptr_ty);
     llvm::set_externally_initialized(&min_caml_hp_glbl, true);
 
-    // allocate memory
+    // allocate heap memory
     // move this to a struct we can shove in an Rc<>
     // to allow keeping the JIT'd code alive
-    let mut mem = unsafe { libc::malloc(128 * 1024 * 1024) };
-    let min_caml_hp = mem;
-    let min_caml_hp_ptr = &mut mem as *mut *mut libc::c_void;
-    eprintln!("min_caml_hp: {:#X}", min_caml_hp as u64);
-    eprintln!("&min_caml_hp: {:#X}", min_caml_hp_ptr as u64);
+    let min_caml_heap = unsafe { libc::malloc(128 * 1024 * 1024) };
+    unsafe { MIN_CAML_HP = min_caml_heap };
+    let min_caml_hp_ptr = unsafe { &mut MIN_CAML_HP as *mut *mut libc::c_void };
+    eprintln!("min_caml_heap: {:#X}", min_caml_heap as u64);
+    eprintln!("&min_caml_hp_ptr: {:#X}", min_caml_hp_ptr as u64);
 
     // add to globals map
     globals.insert(
@@ -783,7 +818,7 @@ pub fn f(p: &closure::Prog) {
 
     // Generate instructions for top level expression
 
-    let int_ty = llvm::Type::int32_type_in_context(&ctx);
+    let int_ty = llvm::Type::int64_type_in_context(&ctx);
     let main_arg_tys = [&void_ty];
     //let main_ty = llvm::Type::function_type(&int_ty, &main_arg_tys);
     let main_ty = llvm::Type::function_type(&void_ty, &main_arg_tys);
@@ -832,6 +867,7 @@ pub fn f(p: &closure::Prog) {
     println!();
     let min_caml_hp_1 = unsafe { *min_caml_hp_ptr };
     eprintln!("min_caml_hp: {:#X}", unsafe { *min_caml_hp_ptr as u64 });
+    // FIXME: slice::from_raw_parts
     let mut ptr = min_caml_hp_0;
     while ptr < min_caml_hp_1 {
         let x = unsafe { *(ptr as *const u64) };
