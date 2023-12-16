@@ -20,7 +20,6 @@ use crate::ty;
 use std::collections::HashMap;
 //use std::ffi::CString;
 
-
 pub fn ty_to_ref_type_in_context(
     ctx: &llvm::Context,
     ty: &ty::Type,
@@ -28,7 +27,6 @@ pub fn ty_to_ref_type_in_context(
     let val_ty = ty_to_type_in_context(ctx, ty, false, false);
     llvm::Type::pointer_type(&val_ty, 0)
 }
-
 
 pub fn ty_to_type_in_context(
     ctx: &llvm::Context,
@@ -62,8 +60,9 @@ pub fn ty_to_type_in_context(
                 } else {
                     vec![]
                 };
-                arg_tys2.extend(arg_tys.iter()
-                    .map(|ty| to_type(ctx, ty, true, true)));
+                arg_tys2.extend(
+                    arg_tys.iter().map(|ty| to_type(ctx, ty, true, true)),
+                );
                 let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
                 let fun_ty = unsafe {
                     LLVMFunctionType(
@@ -74,9 +73,7 @@ pub fn ty_to_type_in_context(
                     )
                 };
                 if fn_ptr {
-                    unsafe {
-                        LLVMPointerType(fun_ty, 0)
-                    }
+                    unsafe { LLVMPointerType(fun_ty, 0) }
                 } else {
                     fun_ty
                 }
@@ -94,8 +91,6 @@ pub fn ty_to_type_in_context(
     let ty_ = to_type(ctx, ty, fn_ptr, fn_closure);
     llvm::Type::new(ty_, false)
 }
-
-
 
 // FN to split asm::T into basic blocks of Vec<Inst>
 //
@@ -727,7 +722,8 @@ pub fn f(p: &closure::Prog) {
                     let mut arg_tys_ =
                         if is_clos { vec![closure_ty] } else { vec![] };
                     for ty in arg_tys {
-                        arg_tys_.push(ty_to_type_in_context(&ctx, ty, true, true));
+                        arg_tys_
+                            .push(ty_to_type_in_context(&ctx, ty, true, true));
                     }
                     let arg_tys_2: Vec<&llvm::Type> = arg_tys_.iter().collect();
                     llvm::Type::function_type(
