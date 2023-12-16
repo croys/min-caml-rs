@@ -29,7 +29,8 @@ use llvm_sys::core::LLVMSetAlignment;
 use llvm_sys::core::LLVMVoidType;
 use llvm_sys::core::LLVMVoidTypeInContext;
 use llvm_sys::core::{
-    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildSub,
+    LLVMAddGlobal, LLVMBuildAdd, LLVMBuildFAdd, LLVMBuildFDiv, LLVMBuildFMul,
+    LLVMBuildFNeg, LLVMBuildFSub, LLVMBuildRet, LLVMBuildRetVoid, LLVMBuildSub,
     LLVMConstArray, LLVMConstInt, LLVMConstReal, LLVMContextCreate,
     LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule, LLVMDumpModule,
     LLVMDumpValue, LLVMFunctionType, LLVMGetGlobalContext, LLVMGetParam,
@@ -559,6 +560,70 @@ impl Builder {
                 self.to_ref(),
                 lhs.to_ref(),
                 rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fadd(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFAdd(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fsub(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFSub(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fmul(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFMul(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fdiv(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFDiv(
+                self.to_ref(),
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fneg(&self, val: &Value, name: &str) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFNeg(
+                self.to_ref(),
+                val.to_ref(),
                 name_.as_ptr() as *const c_char,
             )
         };

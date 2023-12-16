@@ -315,6 +315,46 @@ fn exp_to_llvm(
             let x_ = get_val(globals, builder, vals, x);
             builder.store(&x_, &ptr)
         }
+        FMovD(ref id) => get_val(globals, builder, vals, id),
+        FNegD(ref id) => {
+            let val = get_val(globals, builder, vals, id);
+            builder.fneg(&val, "")
+        }
+        FAddD(ref x, ref y) => {
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = get_val(globals, builder, vals, y);
+            builder.fadd(&x_, &y_, "")
+        }
+        FSubD(ref x, ref y) => {
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = get_val(globals, builder, vals, y);
+            builder.fsub(&x_, &y_, "")
+        }
+        FMulD(ref x, ref y) => {
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = get_val(globals, builder, vals, y);
+            builder.fmul(&x_, &y_, "")
+        }
+        FDivD(ref x, ref y) => {
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = get_val(globals, builder, vals, y);
+            builder.fdiv(&x_, &y_, "")
+        }
+        LdDF(ref base, ref idx, ref step) => {
+            let ptr =
+                struct_index(ctx, globals, builder, vals, base, idx, *step);
+            eprintln!("LdDF {}", base.0);
+            let expected_ty_ =
+                ty_to_type_in_context(ctx, expected_ty, true, false);
+            let ptr_ty = llvm::Type::pointer_type(&expected_ty_, 0);
+            builder.load2(&expected_ty_, &ptr, "")
+        }
+        StDF(ref x, ref base, ref idx, ref step) => {
+            todo!()
+        }
+        Comment(ref txt) => {
+            todo!()
+        }
         CallCls(ref id, ref args, ref fargs) => {
             let cls_val = get_val(globals, builder, vals, id);
             let void_ty = llvm::Type::void_type_in_context(ctx);
@@ -329,14 +369,12 @@ fn exp_to_llvm(
 
             // build args, first is closure
             let mut args_: Vec<&llvm::Value> = vec![&cls_val];
-            for arg in args {
+            for arg in args.iter().chain(fargs) {
                 let (val, _) = vals
                     .get(arg)
                     .unwrap_or_else(|| panic!("No value '{}'", arg.0));
                 args_.push(val);
             }
-            // FIXME: fargs
-
             // call function
             let cls_ty_ = ty_to_type_in_context(ctx, cls_ty, false, true);
             builder.call2(&cls_ty_, &fn_ptr, &args_, "")
@@ -347,13 +385,12 @@ fn exp_to_llvm(
                 .get(id)
                 .unwrap_or_else(|| panic!("No global '{}'", id.0));
             let mut args_: Vec<&llvm::Value> = vec![];
-            for arg in args {
+            for arg in args.iter().chain(fargs) {
                 let (val, _) = vals
                     .get(arg)
                     .unwrap_or_else(|| panic!("No value '{}'", arg.0));
                 args_.push(val);
             }
-            // FIXME: fargs
             let f = llvm::Value::from_ref(fun_glbl.to_ref(), false);
             eprintln!("call2 for {}", id.0);
             builder.call2(fun_ty, &f, &args_, "")
@@ -366,7 +403,6 @@ fn exp_to_llvm(
     }
 }
 
-// FIXME: need globals map too...
 fn to_llvm(
     ctx: &llvm::Context,
     globals: &GlobalMap,
@@ -463,13 +499,44 @@ fn to_llvm(
 // Runtime functions
 
 #[no_mangle]
-pub extern "C" fn min_caml_print_int(x: i32) {
+pub extern "C" fn min_caml_print_int(x: i64) {
     print!("{}", x)
 }
 
 #[no_mangle]
 pub extern "C" fn min_caml_print_newline() {
     println!()
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_abs_float(x: f64) -> f64 {
+    x.abs()
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_sqrt(x: f64) -> f64 {
+    x.sqrt()
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_sin(x: f64) -> f64 {
+    x.sin()
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_cos(x: f64) -> f64 {
+    x.cos()
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_float_of_int(x: i64) -> f64 {
+    let x_: i32 = x.try_into().unwrap();
+    f64::from(x_)
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_int_of_float(x: f64) -> i64 {
+    x.round() as i64
 }
 
 static mut MIN_CAML_HP: *mut libc::c_void = ptr::null_mut();
@@ -483,10 +550,8 @@ pub extern "C" fn min_caml_create_array(
     unsafe {
         let p = MIN_CAML_HP;
         let sz_ = sz as usize;
-        let arr: &mut [u64] = std::slice::from_raw_parts_mut(
-            MIN_CAML_HP as *mut u64,
-            sz as usize,
-        );
+        let arr: &mut [u64] =
+            std::slice::from_raw_parts_mut(MIN_CAML_HP as *mut u64, sz_);
         for v in arr.iter_mut().take(sz_) {
             *v = val;
         }
@@ -640,6 +705,36 @@ pub fn f(p: &closure::Prog) {
             "min_caml_print_newline",
             ty::Type::Fun(vec![], Box::new(ty::Type::Unit)),
             min_caml_print_newline as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_abs_float",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Float)),
+            min_caml_abs_float as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_sqrt",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Float)),
+            min_caml_sqrt as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_sin",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Float)),
+            min_caml_sin as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_cos",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Float)),
+            min_caml_cos as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_float_of_int",
+            ty::Type::Fun(vec![ty::Type::Int], Box::new(ty::Type::Float)),
+            min_caml_float_of_int as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_int_of_float",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Int)),
+            min_caml_int_of_float as *const core::ffi::c_void,
         ),
         (
             "min_caml_create_array",
