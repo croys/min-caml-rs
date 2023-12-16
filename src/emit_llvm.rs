@@ -20,54 +20,21 @@ use crate::ty;
 use std::collections::HashMap;
 //use std::ffi::CString;
 
-pub fn ty_to_type_in_context(ctx: &llvm::Context, ty: &ty::Type) -> llvm::Type {
-    use llvm_sys::core::LLVMDoubleTypeInContext;
-    use llvm_sys::core::LLVMFunctionType;
-    use llvm_sys::core::LLVMInt32TypeInContext;
-    use llvm_sys::core::LLVMVoidTypeInContext;
-    use llvm_sys::prelude::LLVMTypeRef;
 
-    fn to_type(ctx: &llvm::Context, ty: &ty::Type) -> LLVMTypeRef {
-        match ty {
-            ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
-            ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
-            ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
-            ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
-            // FIXME: have a flag to automatically insert
-            // pointer for all function types?
-            // only ever want raw function type at top level?
-            // always use ptr to fn, just change setL to get address...
-            // and to translate type?
-            ty::Type::Fun(ref arg_tys, ref ret_ty) => {
-                let mut arg_tys2: Vec<LLVMTypeRef> =
-                    arg_tys.iter().map(|ty| to_type(ctx, ty)).collect();
-                let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
-                unsafe {
-                    LLVMFunctionType(
-                        to_type(ctx, ret_ty),
-                        arg_tys2.as_mut_ptr(),
-                        n,
-                        0,
-                    )
-                }
-            }
-            ty::Type::Tuple(ref tys) => {
-                todo!()
-            }
-            ty::Type::Array(ref elem_ty) => {
-                todo!()
-            }
-            ty::Type::Var(_) => unreachable!(),
-        }
-    }
-
-    let ty_ = to_type(ctx, ty);
-    llvm::Type::new(ty_, false)
-}
-
-pub fn ty_to_type_in_context2(
+pub fn ty_to_ref_type_in_context(
     ctx: &llvm::Context,
     ty: &ty::Type,
+) -> llvm::Type {
+    let val_ty = ty_to_type_in_context(ctx, ty, false, false);
+    llvm::Type::pointer_type(&val_ty, 0)
+}
+
+
+pub fn ty_to_type_in_context(
+    ctx: &llvm::Context,
+    ty: &ty::Type,
+    fn_ptr: bool,
+    fn_closure: bool,
 ) -> llvm::Type {
     use llvm_sys::core::LLVMDoubleTypeInContext;
     use llvm_sys::core::LLVMFunctionType;
@@ -75,57 +42,12 @@ pub fn ty_to_type_in_context2(
     use llvm_sys::core::LLVMVoidTypeInContext;
     use llvm_sys::prelude::LLVMTypeRef;
 
-    fn to_type(ctx: &llvm::Context, ty: &ty::Type) -> LLVMTypeRef {
-        match ty {
-            ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
-            ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
-            ty::Type::Int => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
-            ty::Type::Float => unsafe { LLVMDoubleTypeInContext(ctx.to_ref()) },
-            // FIXME: have a flag to automatically insert
-            // pointer for all function types?
-            // only ever want raw function type at top level?
-            // always use ptr to fn, just change setL to get address...
-            // and to translate type?
-            ty::Type::Fun(ref arg_tys, ref ret_ty) => {
-                let mut arg_tys2: Vec<LLVMTypeRef> =
-                    arg_tys.iter().map(|ty| to_type(ctx, ty)).collect();
-                let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
-                unsafe {
-                    let fun_ty = LLVMFunctionType(
-                        to_type(ctx, ret_ty),
-                        arg_tys2.as_mut_ptr(),
-                        n,
-                        0,
-                    );
-                    LLVMPointerType(fun_ty, 0)
-                }
-            }
-            ty::Type::Tuple(ref tys) => {
-                todo!()
-            }
-            ty::Type::Array(ref elem_ty) => {
-                todo!()
-            }
-            ty::Type::Var(_) => unreachable!(),
-        }
-    }
-
-    let ty_ = to_type(ctx, ty);
-    llvm::Type::new(ty_, false)
-}
-
-// FIXME: merge with above
-pub fn ty_closure_to_llvm_type(
-    ctx: &llvm::Context,
-    ty: &ty::Type,
-) -> llvm::Type {
-    use llvm_sys::core::LLVMDoubleTypeInContext;
-    use llvm_sys::core::LLVMFunctionType;
-    use llvm_sys::core::LLVMInt32TypeInContext;
-    use llvm_sys::core::LLVMVoidTypeInContext;
-    use llvm_sys::prelude::LLVMTypeRef;
-
-    fn to_type(ctx: &llvm::Context, ty: &ty::Type) -> LLVMTypeRef {
+    fn to_type(
+        ctx: &llvm::Context,
+        ty: &ty::Type,
+        fn_ptr: bool,
+        fn_closure: bool,
+    ) -> LLVMTypeRef {
         match ty {
             ty::Type::Unit => unsafe { LLVMVoidTypeInContext(ctx.to_ref()) },
             ty::Type::Bool => unsafe { LLVMInt32TypeInContext(ctx.to_ref()) },
@@ -135,19 +57,28 @@ pub fn ty_closure_to_llvm_type(
                 let void_ptr_ty = unsafe {
                     LLVMPointerType(LLVMVoidTypeInContext(ctx.to_ref()), 0)
                 };
-                let mut arg_tys2 = vec![void_ptr_ty];
-                arg_tys2.extend(arg_tys.iter().map(|ty| to_type(ctx, ty)));
+                let mut arg_tys2 = if fn_closure {
+                    vec![void_ptr_ty]
+                } else {
+                    vec![]
+                };
+                arg_tys2.extend(arg_tys.iter()
+                    .map(|ty| to_type(ctx, ty, true, true)));
                 let n: libc::c_uint = arg_tys2.len().try_into().unwrap();
-                // Note: fun type in LLVM seems to imply
-                // address/pointer, so no need to explicitly create
-                // pointer type
-                unsafe {
+                let fun_ty = unsafe {
                     LLVMFunctionType(
-                        to_type(ctx, ret_ty),
+                        to_type(ctx, ret_ty, true, true),
                         arg_tys2.as_mut_ptr(),
                         n,
                         0,
                     )
+                };
+                if fn_ptr {
+                    unsafe {
+                        LLVMPointerType(fun_ty, 0)
+                    }
+                } else {
+                    fun_ty
                 }
             }
             ty::Type::Tuple(ref tys) => {
@@ -160,19 +91,11 @@ pub fn ty_closure_to_llvm_type(
         }
     }
 
-    let ty_ = to_type(ctx, ty);
+    let ty_ = to_type(ctx, ty, fn_ptr, fn_closure);
     llvm::Type::new(ty_, false)
 }
 
-pub fn ty_to_ref_type_in_context(
-    ctx: &llvm::Context,
-    ty: &ty::Type,
-) -> llvm::Type {
-    // FIXME: this probably does need to be recursive to catch
-    // functions returning closures
-    let val_ty = ty_to_type_in_context2(ctx, ty);
-    llvm::Type::pointer_type(&val_ty, 0)
-}
+
 
 // FN to split asm::T into basic blocks of Vec<Inst>
 //
@@ -328,40 +251,6 @@ fn exp_to_llvm(
         SetL(ref l) =>
         // simple look up global value
         {
-            // let void_ty = llvm::Type::void_type_in_context(&ctx);
-            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-
-            // let (glbl, ty, ty0) = globals
-            //     .get(l)
-            //     .unwrap_or_else(|| panic!("No value '{}'", l.0));
-            // // FIXME: below should get address of label, not the value...
-            // let ptr = &Value::from_ref(glbl.to_ref(), false);
-            // eprintln!("SetL {} : {:?}", l.0, ty0);
-            // // below results in stack overflow with function type
-            // // LLVM expecting pointer to function type?
-            // //builder.load2(ty, ptr, "");
-            // builder.load2(&void_ptr_ty, ptr, "")
-            // let void_ty = llvm::Type::void_type_in_context(&ctx);
-            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-
-            // below is wrong - does a load of the global val (address)
-            // we want the address itself
-            //
-            // let (glbl, ty, ty0) = globals
-            //     .get(l)
-            //     .unwrap_or_else(|| panic!("No value '{}'", l.0));
-            // // FIXME: just use pointer_type?
-            // let ptr_ty = ty_to_ref_type_in_context(ctx, ty0);
-            // let ptr = &Value::from_ref(glbl.to_ref(), false);
-            // eprintln!("SetL {} : {:?}", l.0, ty0);
-            // // LLVM expecting pointer to function type?
-            // //builder.load2(ty, ptr, ""); // bang
-            // //builder.load2(&ptr_ty, ptr, "") // bang
-            // // let void_ty = llvm::Type::void_type_in_context(&ctx);
-            // // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-            // // builder.load2(&void_ptr_ty, ptr, "") // bang
-            // builder.load2(&ptr_ty, ptr, "")
-
             let (glbl, ty, ty0) = globals
                 .get(l)
                 .unwrap_or_else(|| panic!("No value '{}'", l.0));
@@ -369,17 +258,9 @@ fn exp_to_llvm(
             let ptr = Value::from_ref(glbl.to_ref(), false);
             eprintln!("SetL {} : {:?}", l.0, ty0);
             ptr
-            // // FIXME: name is ignored and we
-            // // don't get a fresh binding
-            // let val = builder.bitcast(&ptr, &ptr_ty, "SETL");
-            // //val.set_name("SETL");
-            // val
         }
         Mov(ref id) => {
             get_val(globals, builder, vals, id)
-            //let val = get_val(globals, builder, vals, id);
-            // module.dump();
-            // todo!();
             // let expected_ty_ = ty_to_ref_type_in_context(ctx, expected_ty);
             // // FIXME: name is ignored and we
             // // don't get a fresh binding
@@ -405,15 +286,6 @@ fn exp_to_llvm(
             builder.sub(&x_, &y_, "")
         }
         Ld(ref base, ref idx, ref step) => {
-            // // FIXME: need type in vals
-            // let void_ty = llvm::Type::void_type_in_context(&ctx);
-            // // let ptr =
-            // //     struct_index(ctx, globals, builder, vals, base, idx, *step);
-            // //let ptr = get_val(globals, builder, vals, base);
-            // //builder.load2(&void_ty, &ptr, "")
-            // let int32_ty = llvm::Type::int32_type_in_context(ctx);
-            // let step_c = llvm::constant::int(&int32_ty, *step);
-            // step_c
             let ptr =
                 struct_index(ctx, globals, builder, vals, base, idx, *step);
             eprintln!("Ld {}", base.0);
@@ -431,43 +303,28 @@ fn exp_to_llvm(
             // in any future compiler, should have explicitly typed
             // structures for closures
             //
-            //builder.load2(, &ptr, "")
-            let expected_ty_ = ty_to_type_in_context2(ctx, expected_ty);
+            let expected_ty_ =
+                ty_to_type_in_context(ctx, expected_ty, true, false);
             let ptr_ty = llvm::Type::pointer_type(&expected_ty_, 0);
-            //builder.load2(&ptr_ty, &ptr, "");
             builder.load2(&expected_ty_, &ptr, "")
-            // FIXME: do need a ref type
-            // for simple types passthrough, for fun/array/tuple
-            // add ptr
-            // FIXME: NOP
-            // let c =
-            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
-            // builder.add(&c, &c, "")
         }
         St(ref x, ref base, ref idx, ref step) => {
             let ptr =
                 struct_index(ctx, globals, builder, vals, base, idx, *step);
             let x_ = get_val(globals, builder, vals, x);
             builder.store(&x_, &ptr)
-            // FIXME: NOP
-            // let c =
-            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
-            // builder.add(&c, &c, "")
         }
         CallCls(ref id, ref args, ref fargs) => {
             let cls_val = get_val(globals, builder, vals, id);
             let void_ty = llvm::Type::void_type_in_context(ctx);
             let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
+            // read function arg from first word in closure
             let fn_ptr = builder.load2(&void_ptr_ty, &cls_val, "");
 
-            // read function arg from first word in closure
-
             // call closure function with closure as first arg
-
             let (_, cls_ty) = vals.get(id).unwrap_or_else(|| {
                 panic!("Unable to get type for closure '{}'", id.0)
             });
-            let cls_ty_ = ty_closure_to_llvm_type(ctx, cls_ty);
 
             // build args, first is closure
             let mut args_: Vec<&llvm::Value> = vec![&cls_val];
@@ -480,26 +337,14 @@ fn exp_to_llvm(
             // FIXME: fargs
 
             // call function
-            let cls_ty_ = ty_closure_to_llvm_type(ctx, cls_ty);
+            let cls_ty_ = ty_to_type_in_context(ctx, cls_ty, false, true);
             builder.call2(&cls_ty_, &fn_ptr, &args_, "")
-            // println!("Not done: {:?}", e);
-            // module.dump();
-            // todo!()
-            // FIXME: NOP
-            // let c =
-            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
-            // builder.add(&c, &c, "")
         }
         CallDir(id, args, fargs) => {
             // get global for label
             let (fun_glbl, fun_ty, _) = globals
                 .get(id)
                 .unwrap_or_else(|| panic!("No global '{}'", id.0));
-            // get values for args
-            // let void_ty = llvm::Type::void_type_in_context(&ctx);
-            // let void_ptr_ty = llvm::Type::pointer_type(&void_ty, 0);
-            // let null_ptr = llvm::constant::pointer_null(&void_ptr_ty);
-            // let mut args_: Vec<&llvm::Value> = vec![&null_ptr];
             let mut args_: Vec<&llvm::Value> = vec![];
             for arg in args {
                 let (val, _) = vals
@@ -511,11 +356,6 @@ fn exp_to_llvm(
             let f = llvm::Value::from_ref(fun_glbl.to_ref(), false);
             eprintln!("call2 for {}", id.0);
             builder.call2(fun_ty, &f, &args_, "")
-            // FIXME: put above back in
-            // FIXME: NOP
-            // let c =
-            // llvm::constant::int(&llvm::Type::int32_type_in_context(ctx), 0);
-            // builder.add(&c, &c, "")
         }
         _ => {
             println!("Not done: {:?}", e);
@@ -783,8 +623,7 @@ pub fn f(p: &closure::Prog) {
 
     // FIXME: need to split ty args
     for (name, ty, ptr) in runtime_functions {
-        let ty_ = ty_to_type_in_context(&ctx, &ty);
-        //let ty_ = ty_to_type_in_context2(&ctx, &ty);
+        let ty_ = ty_to_type_in_context(&ctx, &ty, false, false);
         let glbl = module.add_global(name, &ty_);
         llvm::set_externally_initialized(&glbl, true);
         llvm::add_symbol(name, ptr);
@@ -865,22 +704,16 @@ pub fn f(p: &closure::Prog) {
         ret: ref ret_ty,
     } in fds
     {
-        //let is_clos = name.0 != "make_adder.5";
         let is_clos = is_closure(name, p);
-        //if name.0 == "make_adder.5" { continue }
-        //let f_ty_ = ty_to_type_in_context(&ctx, &split_ty_args(f_ty));
 
-        // FIXME: functions need to have an implicit closure argument
-        // might need local vals map for each function...
-        // extended with fn name -> closure value
+        // For closures, we need the function type
+        // to be extended with the closure parameter, and to add
+        // a GetParam instruction to get the closure argument with
+        // the same local name as the function.
         //
-        // First argument should be the closure
-        // generated code should include a GetParam for the
-        // closure argument, naming it the same as the function
-        //
-        // CallCls then reads the function pointer from the closure,
-        // calls this function, and provides the closure pointer itself
-        // as the first arg
+        // Note: we need to assume all function types are closures
+        // as these should be the only values passed around of function type.
+        // arguably, closures should be explicitly marked as such.
         //
         let f_ty = fd_tys
             .get(name)
@@ -894,11 +727,11 @@ pub fn f(p: &closure::Prog) {
                     let mut arg_tys_ =
                         if is_clos { vec![closure_ty] } else { vec![] };
                     for ty in arg_tys {
-                        arg_tys_.push(ty_to_type_in_context2(&ctx, ty));
+                        arg_tys_.push(ty_to_type_in_context(&ctx, ty, true, true));
                     }
                     let arg_tys_2: Vec<&llvm::Type> = arg_tys_.iter().collect();
                     llvm::Type::function_type(
-                        &ty_to_type_in_context2(&ctx, res_ty),
+                        &ty_to_type_in_context(&ctx, res_ty, true, true),
                         &arg_tys_2,
                     )
                 }

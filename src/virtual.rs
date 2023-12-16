@@ -442,9 +442,6 @@ pub fn h(cfg: &Config, fd: &closure::FunDef) -> asm::FunDef {
     }
 }
 
-// FIXME: take config to specify
-// int/word (and float?) sizes
-
 /* プログラム全体の仮想マシンコード生成 (caml2html: virtual_f) */
 pub fn f(cfg: &Config, p: &closure::Prog) -> asm::Prog {
     let closure::Prog::Prog(ref fundefs, ref e) = p;
