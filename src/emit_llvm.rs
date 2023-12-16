@@ -350,7 +350,10 @@ fn exp_to_llvm(
             builder.load2(&expected_ty_, &ptr, "")
         }
         StDF(ref x, ref base, ref idx, ref step) => {
-            todo!()
+            let ptr =
+                struct_index(ctx, globals, builder, vals, base, idx, *step);
+            let x_ = get_val(globals, builder, vals, x);
+            builder.store(&x_, &ptr)
         }
         Comment(ref txt) => {
             todo!()
@@ -539,6 +542,11 @@ pub extern "C" fn min_caml_int_of_float(x: f64) -> i64 {
     x.round() as i64
 }
 
+#[no_mangle]
+pub extern "C" fn min_caml_truncate(x: f64) -> i64 {
+    x as i64
+}
+
 static mut MIN_CAML_HP: *mut libc::c_void = ptr::null_mut();
 
 #[no_mangle]
@@ -552,6 +560,25 @@ pub extern "C" fn min_caml_create_array(
         let sz_ = sz as usize;
         let arr: &mut [u64] =
             std::slice::from_raw_parts_mut(MIN_CAML_HP as *mut u64, sz_);
+        for v in arr.iter_mut().take(sz_) {
+            *v = val;
+        }
+        MIN_CAML_HP = MIN_CAML_HP.wrapping_add(sz_ * 8);
+        p
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn min_caml_create_float_array(
+    sz: u64,
+    val: f64,
+) -> *mut libc::c_void {
+    println!("Initialising float array: {}, {}", sz, val);
+    unsafe {
+        let p = MIN_CAML_HP;
+        let sz_ = sz as usize;
+        let arr: &mut [f64] =
+            std::slice::from_raw_parts_mut(MIN_CAML_HP as *mut f64, sz_);
         for v in arr.iter_mut().take(sz_) {
             *v = val;
         }
@@ -737,12 +764,25 @@ pub fn f(p: &closure::Prog) {
             min_caml_int_of_float as *const core::ffi::c_void,
         ),
         (
+            "min_caml_truncate",
+            ty::Type::Fun(vec![ty::Type::Float], Box::new(ty::Type::Int)),
+            min_caml_truncate as *const core::ffi::c_void,
+        ),
+        (
             "min_caml_create_array",
             ty::Type::Fun(
                 vec![ty::Type::Int, ty::Type::Int],
                 Box::new(ty::Type::Int), // Really want address type
             ),
             min_caml_create_array as *const core::ffi::c_void,
+        ),
+        (
+            "min_caml_create_float_array",
+            ty::Type::Fun(
+                vec![ty::Type::Int, ty::Type::Float],
+                Box::new(ty::Type::Int), // Really want address type
+            ),
+            min_caml_create_float_array as *const core::ffi::c_void,
         ),
     ];
 
