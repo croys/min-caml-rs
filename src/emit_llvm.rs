@@ -180,22 +180,33 @@ fn exp_to_llvm(
         vals: &ValueMap,
         id: &id::T,
     ) -> Value {
-        let val = vals.get(id);
-        match val {
-            Some((v, _)) => llvm::Value::from_ref(v.to_ref(), false),
-            None => {
-                let (glbl, ty, ty0) = globals
-                    .get(&id::L(id.0.clone()))
-                    .unwrap_or_else(|| panic!("No value '{}'", id.0));
-                let ptr = &Value::from_ref(glbl.to_ref(), false);
-                // FIXME: we need a flag to configure this behaviour
-                // might want load of global as pointer
-                // or just use of global directly..
-                let ty_ = llvm::Type::pointer_type(ty, 0);
-                // FIXME: use a temp?
-                builder.load2(&ty_, ptr, "")
-                // let ptr = Value::from_ref(glbl.to_ref(), false);
-                // ptr
+        // FIXME: special case
+        if id.0 == "min_caml_hp" {
+            let (glbl, ty, ty0) = globals
+                .get(&id::L(id.0.clone()))
+                .unwrap_or_else(|| panic!("No value '{}'", id.0));
+            let ptr = &Value::from_ref(glbl.to_ref(), false);
+            let ty_ = llvm::Type::pointer_type(ty, 0);
+            // FIXME: use a temp?
+            builder.load2(&ty_, ptr, "")
+        } else {
+            let val = vals.get(id);
+            match val {
+                Some((v, _)) => llvm::Value::from_ref(v.to_ref(), false),
+                None => {
+                    let (glbl, ty, ty0) = globals
+                        .get(&id::L(id.0.clone()))
+                        .unwrap_or_else(|| panic!("No value '{}'", id.0));
+                    let ptr = &Value::from_ref(glbl.to_ref(), false);
+                    // FIXME: we need a flag to configure this behaviour
+                    // might want load of global as pointer
+                    // or just use of global directly..
+                    let ty_ = llvm::Type::pointer_type(ty, 0);
+                    // FIXME: use a temp?
+                    builder.load2(&ty_, ptr, "")
+                    // let ptr = Value::from_ref(glbl.to_ref(), false);
+                    // ptr
+                }
             }
         }
     }
