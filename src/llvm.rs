@@ -31,6 +31,9 @@ use llvm_sys::core::LLVMBuildStore;
 use llvm_sys::core::LLVMCreateBasicBlockInContext;
 use llvm_sys::core::LLVMCreateBuilderInContext;
 use llvm_sys::core::LLVMDumpType;
+use llvm_sys::core::LLVMGetInstructionOpcode;
+use llvm_sys::core::LLVMGetLastBasicBlock;
+use llvm_sys::core::LLVMGetLastInstruction;
 use llvm_sys::core::LLVMPointerType;
 use llvm_sys::core::LLVMPositionBuilderAtEnd;
 use llvm_sys::core::LLVMSetAlignment;
@@ -494,6 +497,26 @@ impl BasicBlock {
 
     pub fn append(&self, fun: &Value) {
         unsafe { LLVMAppendExistingBasicBlock(fun.to_ref(), self.to_ref()) }
+    }
+
+    // get the basic block
+    pub fn get_last(fun: &Value) -> BasicBlock {
+        let bb = unsafe { LLVMGetLastBasicBlock(fun.to_ref()) };
+        BasicBlock {
+            val: bb,
+            owned: false,
+        }
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        unsafe {
+            let val = LLVMGetLastInstruction(self.to_ref());
+            let op = LLVMGetInstructionOpcode(val);
+            matches!(
+                op,
+                llvm_sys::LLVMOpcode::LLVMBr | llvm_sys::LLVMOpcode::LLVMRet
+            )
+        }
     }
 }
 
