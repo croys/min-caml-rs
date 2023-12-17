@@ -358,6 +358,89 @@ fn exp_to_llvm(
         Comment(ref txt) => {
             todo!()
         }
+        IfEq(ref x, ref y, ref e1, ref e2)
+        | IfLE(ref x, ref y, ref e1, ref e2)
+        | IfGE(ref x, ref y, ref e1, ref e2)
+        | IfLt(ref x, ref y, ref e1, ref e2)
+        | IfGt(ref x, ref y, ref e1, ref e2) => {
+            // condition
+            let x_ = get_val(globals, builder, vals, x);
+            let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
+            let cond_lbl = id::genid(&id::T(String::from("brC")));
+            //let cond = builder.eq(&x_, &y_, &cond_lbl.0);
+            let cond = match e {
+                IfEq(_, _, _, _) => builder.icmp_eq(&x_, &y_, &cond_lbl.0),
+                IfLE(_, _, _, _) => builder.icmp_le(&x_, &y_, &cond_lbl.0),
+                IfGE(_, _, _, _) => builder.icmp_ge(&x_, &y_, &cond_lbl.0),
+                IfLt(_, _, _, _) => builder.icmp_lt(&x_, &y_, &cond_lbl.0),
+                IfGt(_, _, _, _) => builder.icmp_gt(&x_, &y_, &cond_lbl.0),
+                _ => unreachable!(),
+            };
+            // labels and basic blocks for each branch
+            let e1_lbl = id::genid(&id::T(String::from("brT")));
+            let e1_bb =
+                llvm::BasicBlock::create_basic_block_in_context(ctx, &e1_lbl.0);
+            let e2_lbl = id::genid(&id::T(String::from("brF")));
+            let e2_bb =
+                llvm::BasicBlock::create_basic_block_in_context(ctx, &e2_lbl.0);
+            let end_lbl = id::genid(&id::T(String::from("brE")));
+            let end_bb = llvm::BasicBlock::create_basic_block_in_context(
+                ctx, &end_lbl.0,
+            );
+            // conditional branch
+            builder.cond_br(&cond, &e1_bb, &e2_bb);
+
+            // basic block for true e1
+            builder.position_builder_at_end(&e1_bb);
+            let e1_val = to_llvm(
+                ctx,
+                globals,
+                module,
+                fun,
+                &e1_bb,
+                builder,
+                vals,
+                e1,
+                expected_ty,
+            );
+            // - branch to end
+            builder.br(&end_bb);
+            e1_bb.append(fun);
+
+            // basic block for false e2
+            builder.position_builder_at_end(&e2_bb);
+            let e2_val = to_llvm(
+                ctx,
+                globals,
+                module,
+                fun,
+                &e2_bb,
+                builder,
+                vals,
+                e2,
+                expected_ty,
+            );
+            // - branch to end
+            builder.br(&end_bb);
+            e2_bb.append(fun);
+
+            // `end` basic block
+            builder.position_builder_at_end(&end_bb);
+            // - phi with results from previous blocks
+            let expected_ty_ =
+                ty_to_type_in_context(ctx, expected_ty, true, false);
+            let val = builder.phi(
+                &expected_ty_,
+                &cond_lbl.0,
+                &[(&e1_val, &e1_bb), (&e2_val, &e2_bb)],
+            );
+            end_bb.append(fun);
+            val
+            // FIXME: abstract this out over the condition
+            // println!("Not done: {:?}", e);
+            // module.dump();
+            // todo!()
+        }
         CallCls(ref id, ref args, ref fargs) => {
             let cls_val = get_val(globals, builder, vals, id);
             let void_ty = llvm::Type::void_type_in_context(ctx);
@@ -416,7 +499,7 @@ fn to_llvm(
     vals: &mut ValueMap,
     p: &asm::T,
     expected_ty: &ty::Type,
-) {
+) -> Value {
     // need to maintain id -> value map
     // and pass down name
     // need last inst flag to generate ret
@@ -440,11 +523,7 @@ fn to_llvm(
                 let id = id::genid(&id::T(String::from(".ans")));
                 val.set_name(id.0.as_str());
             }
-            if *expected_ty == ty::Type::Unit {
-                builder.ret_void();
-            } else {
-                builder.ret(&val);
-            }
+            val
         }
         asm::T::Let((ref id, ref ty), ref e, ref t) => {
             // need a temporary for the intermediate?
@@ -496,6 +575,35 @@ fn to_llvm(
                 expected_ty,
             )
         }
+    }
+}
+
+fn to_llvm_fun(
+    ctx: &llvm::Context,
+    globals: &GlobalMap,
+    module: &llvm::Module,
+    fun: &llvm::Value,
+    bblock: &llvm::BasicBlock,
+    builder: &llvm::Builder,
+    vals: &mut ValueMap,
+    p: &asm::T,
+    expected_ty: &ty::Type,
+) {
+    let val = to_llvm(
+        ctx,
+        globals,
+        module,
+        fun,
+        bblock,
+        builder,
+        vals,
+        p,
+        expected_ty,
+    );
+    if *expected_ty == ty::Type::Unit {
+        builder.ret_void();
+    } else {
+        builder.ret(&val);
     }
 }
 
@@ -945,7 +1053,7 @@ pub fn f(p: &closure::Prog) {
 
         builder.position_builder_at_end(&fun_bb);
 
-        to_llvm(
+        to_llvm_fun(
             &ctx, &globals, &module, &fun_val, &fun_bb, &builder, &mut vals,
             exp, ret_ty,
         );
@@ -967,7 +1075,7 @@ pub fn f(p: &closure::Prog) {
 
     builder.position_builder_at_end(&main_bb);
 
-    to_llvm(
+    to_llvm_fun(
         &ctx,
         &globals,
         &module,

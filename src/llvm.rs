@@ -11,16 +11,24 @@ use crate::ty;
 
 extern crate llvm_sys;
 
+use libc::RTEXT_FILTER_BRVLAN;
 use llvm_sys::core::LLVMAddAlias2;
 use llvm_sys::core::LLVMAddFunction;
+use llvm_sys::core::LLVMAddIncoming;
 use llvm_sys::core::LLVMAppendBasicBlockInContext;
+use llvm_sys::core::LLVMAppendExistingBasicBlock;
 use llvm_sys::core::LLVMBuildBitCast;
+use llvm_sys::core::LLVMBuildBr;
 use llvm_sys::core::LLVMBuildCall2;
+use llvm_sys::core::LLVMBuildCondBr;
+use llvm_sys::core::LLVMBuildICmp;
 use llvm_sys::core::LLVMBuildLoad2;
 use llvm_sys::core::LLVMBuildMul;
 use llvm_sys::core::LLVMBuildNUWAdd;
 use llvm_sys::core::LLVMBuildNeg;
+use llvm_sys::core::LLVMBuildPhi;
 use llvm_sys::core::LLVMBuildStore;
+use llvm_sys::core::LLVMCreateBasicBlockInContext;
 use llvm_sys::core::LLVMCreateBuilderInContext;
 use llvm_sys::core::LLVMDumpType;
 use llvm_sys::core::LLVMPointerType;
@@ -63,6 +71,7 @@ use llvm_sys::orc2::LLVMOrcCreateNewThreadSafeContext;
 use llvm_sys::orc2::LLVMOrcCreateNewThreadSafeModule;
 use llvm_sys::orc2::LLVMOrcDisposeThreadSafeContext;
 use llvm_sys::orc2::LLVMOrcDisposeThreadSafeModule;
+use llvm_sys::LLVMIntPredicate;
 //use llvm_sys::orc2::LLVMOrcExecutionSessionCreateJITDylib;
 use llvm_sys::orc2::LLVMOrcExecutionSessionRef;
 use llvm_sys::orc2::LLVMOrcExecutorAddress;
@@ -468,6 +477,24 @@ impl BasicBlock {
             owned: false,
         }
     }
+
+    pub fn create_basic_block_in_context(
+        ctx: &Context,
+        name: &str,
+    ) -> BasicBlock {
+        let name_ = CString::new(name).unwrap();
+        let bb = unsafe {
+            LLVMCreateBasicBlockInContext(ctx.to_ref(), name_.as_ptr())
+        };
+        BasicBlock {
+            val: bb,
+            owned: false,
+        }
+    }
+
+    pub fn append(&self, fun: &Value) {
+        unsafe { LLVMAppendExistingBasicBlock(fun.to_ref(), self.to_ref()) }
+    }
 }
 
 // Builder
@@ -694,6 +721,92 @@ impl Builder {
                 ty.to_ref(),
                 name_.as_ptr() as *const c_char,
             )
+        };
+        Value { val, owned: false }
+    }
+
+    fn icmp(
+        &self,
+        pred: LLVMIntPredicate,
+        lhs: &Value,
+        rhs: &Value,
+        name: &str,
+    ) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildICmp(
+                self.to_ref(),
+                pred,
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn icmp_eq(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.icmp(LLVMIntPredicate::LLVMIntEQ, lhs, rhs, name)
+    }
+
+    pub fn icmp_le(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.icmp(LLVMIntPredicate::LLVMIntSLE, lhs, rhs, name)
+    }
+
+    pub fn icmp_ge(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.icmp(LLVMIntPredicate::LLVMIntSGE, lhs, rhs, name)
+    }
+
+    pub fn icmp_lt(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.icmp(LLVMIntPredicate::LLVMIntSLT, lhs, rhs, name)
+    }
+
+    pub fn icmp_gt(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.icmp(LLVMIntPredicate::LLVMIntSGT, lhs, rhs, name)
+    }
+
+    pub fn br(&self, bb: &BasicBlock) -> Value {
+        let val = unsafe { LLVMBuildBr(self.to_ref(), bb.to_ref()) };
+        Value { val, owned: false }
+    }
+
+    pub fn cond_br(
+        &self,
+        cond: &Value,
+        true_bb: &BasicBlock,
+        false_bb: &BasicBlock,
+    ) -> Value {
+        let val = unsafe {
+            LLVMBuildCondBr(
+                self.to_ref(),
+                cond.to_ref(),
+                true_bb.to_ref(),
+                false_bb.to_ref(),
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn phi(
+        &self,
+        ty: &Type,
+        name: &str,
+        incoming: &[(&Value, &BasicBlock)],
+    ) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            let val = LLVMBuildPhi(self.to_ref(), ty.to_ref(), name_.as_ptr());
+            let mut in_vals: Vec<LLVMValueRef> =
+                incoming.iter().map(|x| x.0.to_ref()).collect();
+            let mut in_blocks: Vec<LLVMBasicBlockRef> =
+                incoming.iter().map(|x| x.1.to_ref()).collect();
+            LLVMAddIncoming(
+                val,
+                in_vals.as_mut_ptr(),
+                in_blocks.as_mut_ptr(),
+                in_vals.len() as u32,
+            );
+            val
         };
         Value { val, owned: false }
     }
