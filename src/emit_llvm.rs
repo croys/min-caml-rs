@@ -457,13 +457,18 @@ fn exp_to_llvm(
             // `end` basic block
             builder.position_builder_at_end(&end_bb);
             // - phi with results from previous blocks
-            let expected_ty_ =
-                ty_to_type_in_context(ctx, expected_ty, true, false);
-            let val = builder.phi(
-                &expected_ty_,
-                &if_id.0,
-                &[(&e1_val, &e1_last_bb), (&e2_val, &e2_last_bb)],
-            );
+            let val = if expected_ty == &ty::Type::Unit {
+                // FIXME: no-op, call to llvm.donothing
+                llvm::constant::int(&llvm::Type::int64_type_in_context(ctx), 0)
+            } else {
+                let expected_ty_ =
+                    ty_to_type_in_context(ctx, expected_ty, true, false);
+                builder.phi(
+                    &expected_ty_,
+                    &if_id.0,
+                    &[(&e1_val, &e1_last_bb), (&e2_val, &e2_last_bb)],
+                )
+            };
             // Terminate this Basic Block
             match next_bb {
                 None => (),
