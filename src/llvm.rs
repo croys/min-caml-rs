@@ -21,6 +21,7 @@ use llvm_sys::core::LLVMBuildBitCast;
 use llvm_sys::core::LLVMBuildBr;
 use llvm_sys::core::LLVMBuildCall2;
 use llvm_sys::core::LLVMBuildCondBr;
+use llvm_sys::core::LLVMBuildFCmp;
 use llvm_sys::core::LLVMBuildICmp;
 use llvm_sys::core::LLVMBuildLoad2;
 use llvm_sys::core::LLVMBuildMul;
@@ -75,6 +76,7 @@ use llvm_sys::orc2::LLVMOrcCreateNewThreadSafeModule;
 use llvm_sys::orc2::LLVMOrcDisposeThreadSafeContext;
 use llvm_sys::orc2::LLVMOrcDisposeThreadSafeModule;
 use llvm_sys::LLVMIntPredicate;
+use llvm_sys::LLVMRealPredicate;
 //use llvm_sys::orc2::LLVMOrcExecutionSessionCreateJITDylib;
 use llvm_sys::orc2::LLVMOrcExecutionSessionRef;
 use llvm_sys::orc2::LLVMOrcExecutorAddress;
@@ -786,6 +788,46 @@ impl Builder {
 
     pub fn icmp_gt(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
         self.icmp(LLVMIntPredicate::LLVMIntSGT, lhs, rhs, name)
+    }
+
+    fn fcmp(
+        &self,
+        pred: LLVMRealPredicate,
+        lhs: &Value,
+        rhs: &Value,
+        name: &str,
+    ) -> Value {
+        let name_ = CString::new(name).unwrap();
+        let val = unsafe {
+            LLVMBuildFCmp(
+                self.to_ref(),
+                pred,
+                lhs.to_ref(),
+                rhs.to_ref(),
+                name_.as_ptr() as *const c_char,
+            )
+        };
+        Value { val, owned: false }
+    }
+
+    pub fn fcmp_eq(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.fcmp(LLVMRealPredicate::LLVMRealOEQ, lhs, rhs, name)
+    }
+
+    pub fn fcmp_le(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.fcmp(LLVMRealPredicate::LLVMRealOLE, lhs, rhs, name)
+    }
+
+    pub fn fcmp_ge(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.fcmp(LLVMRealPredicate::LLVMRealOGE, lhs, rhs, name)
+    }
+
+    pub fn fcmp_lt(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.fcmp(LLVMRealPredicate::LLVMRealOLT, lhs, rhs, name)
+    }
+
+    pub fn fcmp_gt(&self, lhs: &Value, rhs: &Value, name: &str) -> Value {
+        self.fcmp(LLVMRealPredicate::LLVMRealOGT, lhs, rhs, name)
     }
 
     pub fn br(&self, bb: &BasicBlock) -> Value {

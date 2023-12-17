@@ -370,27 +370,74 @@ fn exp_to_llvm(
         Comment(ref txt) => {
             todo!()
         }
-        // FIXME: need to pass down
-        // optional label/basic block for branch?
-        IfEq(ref x, ref y, ref e1, ref e2)
-        | IfLE(ref x, ref y, ref e1, ref e2)
-        | IfGE(ref x, ref y, ref e1, ref e2)
-        | IfLt(ref x, ref y, ref e1, ref e2)
-        | IfGt(ref x, ref y, ref e1, ref e2) => {
+        IfEq(ref x, _, ref e1, ref e2)
+        | IfLE(ref x, _, ref e1, ref e2)
+        | IfGE(ref x, _, ref e1, ref e2)
+        | IfLt(ref x, _, ref e1, ref e2)
+        | IfGt(ref x, _, ref e1, ref e2)
+        | IfFEq(ref x, _, ref e1, ref e2)
+        | IfFLE(ref x, _, ref e1, ref e2)
+        | IfFGE(ref x, _, ref e1, ref e2)
+        | IfFLt(ref x, _, ref e1, ref e2)
+        | IfFGt(ref x, _, ref e1, ref e2) => {
             // condition
             let x_ = get_val(globals, builder, vals, x);
-            let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
-            let if_id = id::genid(&id::T(String::from("if")));
             let cond_id = id::genid(&id::T(String::from("brC")));
-            //let cond = builder.eq(&x_, &y_, &cond_lbl.0);
             let cond = match e {
-                IfEq(_, _, _, _) => builder.icmp_eq(&x_, &y_, &cond_id.0),
-                IfLE(_, _, _, _) => builder.icmp_le(&x_, &y_, &cond_id.0),
-                IfGE(_, _, _, _) => builder.icmp_ge(&x_, &y_, &cond_id.0),
-                IfLt(_, _, _, _) => builder.icmp_lt(&x_, &y_, &cond_id.0),
-                IfGt(_, _, _, _) => builder.icmp_gt(&x_, &y_, &cond_id.0),
+                IfEq(_, ref y, _, _)
+                | IfLE(_, ref y, _, _)
+                | IfGE(_, ref y, _, _)
+                | IfLt(_, ref y, _, _)
+                | IfGt(_, ref y, _, _) => {
+                    let y_ = id_or_imm_to_value(ctx, globals, builder, vals, y);
+                    match e {
+                        IfEq(_, _, _, _) => {
+                            builder.icmp_eq(&x_, &y_, &cond_id.0)
+                        }
+                        IfLE(_, _, _, _) => {
+                            builder.icmp_le(&x_, &y_, &cond_id.0)
+                        }
+                        IfGE(_, _, _, _) => {
+                            builder.icmp_ge(&x_, &y_, &cond_id.0)
+                        }
+                        IfLt(_, _, _, _) => {
+                            builder.icmp_lt(&x_, &y_, &cond_id.0)
+                        }
+                        IfGt(_, _, _, _) => {
+                            builder.icmp_gt(&x_, &y_, &cond_id.0)
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                IfFEq(_, ref y, _, _)
+                | IfFLE(_, ref y, _, _)
+                | IfFGE(_, ref y, _, _)
+                | IfFLt(_, ref y, _, _)
+                | IfFGt(_, ref y, _, _) => {
+                    let y_ = get_val(globals, builder, vals, y);
+                    match e {
+                        IfFEq(_, _, _, _) => {
+                            builder.fcmp_eq(&x_, &y_, &cond_id.0)
+                        }
+                        IfFLE(_, _, _, _) => {
+                            builder.fcmp_le(&x_, &y_, &cond_id.0)
+                        }
+                        IfFGE(_, _, _, _) => {
+                            builder.fcmp_ge(&x_, &y_, &cond_id.0)
+                        }
+                        IfFLt(_, _, _, _) => {
+                            builder.fcmp_lt(&x_, &y_, &cond_id.0)
+                        }
+                        IfFGt(_, _, _, _) => {
+                            builder.fcmp_gt(&x_, &y_, &cond_id.0)
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => unreachable!(),
             };
+            // result of the if expression
+            let if_id = id::genid(&id::T(String::from("if")));
             // labels and basic blocks for each branch
             let e1_lbl = id::genid(&id::T(String::from("brT")));
             let e1_bb =
@@ -421,7 +468,6 @@ fn exp_to_llvm(
                 &Some(&end_bb),
             );
             // Note: recursve calls can create new basic blocks
-            // If the basic block is terminated
             let e1_last_bb = llvm::BasicBlock::get_last(fun);
             // - branch to end, if last instruction wasn't a branch
             if !e1_last_bb.is_terminated() {
@@ -519,11 +565,7 @@ fn exp_to_llvm(
             eprintln!("call2 for {}", id.0);
             builder.call2(fun_ty, &f, &args_, "")
         }
-        _ => {
-            println!("Not done: {:?}", e);
-            module.dump();
-            todo!()
-        }
+        Save(_, _) | Restore(_) => unreachable!(),
     }
 }
 
