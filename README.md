@@ -49,13 +49,14 @@ possible.
   * unnecessary definition elimination
 * Closure Conversion - done
 * Virtual Machine Code generation - done
-* LLVM Generation - in progress
+* LLVM Generation - mostly done
 * System library
   * for reference interpreter - mostly done
-  * for LLVM backend - in progress
+  * for LLVM backend - mostly done
 * Reference interpreter - done
 * REPL
   * for reference interpreter
+  * for LLVM
 * Command line - mostly done
 
 <!--
